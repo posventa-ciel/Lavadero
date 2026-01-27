@@ -52,24 +52,23 @@ def main():
         IDX_INICIO = 8     # Columna I
         IDX_FIN = 9        # Columna J
 
-        # --- FECHA DE HOY (TEXTO) ---
+        # --- FECHA DE HOY ---
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz_ar)
         
-        # Generamos las variantes de texto posibles para "hoy"
-        # Ejemplo: "27/1", "27/01", "27/1/2026", "27-01"
-        hoy_dia = str(ahora.day)
-        hoy_mes = str(ahora.month)
+        # CORRECCIÓN AQUÍ: Mantenemos como números (int)
+        hoy_dia = ahora.day
+        hoy_mes = ahora.month
         
-        # Texto clave: "27/1" (Sin ceros adelante es lo más común en tu excel)
-        texto_busqueda_1 = f"{hoy_dia}/{hoy_mes}"       # 27/1
-        texto_busqueda_2 = f"{hoy_dia:02d}/{hoy_mes:02d}" # 27/01
+        # Generamos las dos formas de escribir la fecha:
+        texto_busqueda_1 = f"{hoy_dia}/{hoy_mes}"       # Ejemplo: 27/1
+        texto_busqueda_2 = f"{hoy_dia:02d}/{hoy_mes:02d}" # Ejemplo: 27/01
         
         # --- BARRA LATERAL (DEBUG) ---
         with st.sidebar:
             st.header("🔧 Controles")
             ver_todo = st.checkbox("⚠️ Ver TODO (Ignorar fecha)", value=False)
-            st.write(f"Buscando fecha que contenga: **'{texto_busqueda_1}'**")
+            st.write(f"Buscando autos con fecha: **'{texto_busqueda_1}'** o **'{texto_busqueda_2}'**")
 
         lista_pendientes = []
         lista_terminados = []
@@ -84,13 +83,14 @@ def main():
             # 1. LEER FECHA COMO TEXTO
             fecha_celda = str(fila[IDX_FECHA]).strip()
             
-            # 2. FILTRO INTELIGENTE
-            # Si "Ver Todo" está apagado, aplicamos el filtro de fecha
+            # 2. FILTRO INTELIGENTE DE TEXTO
             es_de_hoy = False
+            
             if ver_todo:
                 es_de_hoy = True
             else:
-                # Si la celda contiene "27/1" o "27/01" -> ES DE HOY
+                # Buscamos si la celda contiene "27/1" o "27/01"
+                # Usamos "in" por si la celda dice "27/1/2026" (funciona igual)
                 if texto_busqueda_1 in fecha_celda or texto_busqueda_2 in fecha_celda:
                     es_de_hoy = True
             
@@ -124,7 +124,7 @@ def main():
         
         if not lista_pendientes:
             st.warning(f"No encontré autos que digan '{texto_busqueda_1}' en la primera columna.")
-            st.info("Prueba activando la casilla '⚠️ Ver TODO' en el menú de la izquierda.")
+            st.info("Prueba activando la casilla '⚠️ Ver TODO' en el menú de la izquierda para ver si aparecen.")
         else:
             # Ordenar
             lista_pendientes.sort(key=lambda x: x["orden"])
@@ -151,14 +151,12 @@ def main():
                     f = auto['fila']
                     if not auto['inicio']:
                         if st.button("▶️ Iniciar", key=f"s_{f}", type="secondary"):
-                            # ESCRIBIR HORA ACTUAL
                             h_act = datetime.now(tz_ar).strftime("%H:%M")
                             hoja.update_cell(f, IDX_INICIO + 1, h_act)
                             st.rerun()
                     else:
                         st.caption(f"Inició: {auto['inicio']}")
                         if st.button("🏁 Listo", key=f"e_{f}", type="primary"):
-                            # ESCRIBIR HORA FIN
                             h_act = datetime.now(tz_ar).strftime("%H:%M")
                             hoja.update_cell(f, IDX_FIN + 1, h_act)
                             st.rerun()
