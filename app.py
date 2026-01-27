@@ -2,29 +2,27 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
-import pytz 
+import pytz
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Lavadero Pro", layout="wide")
 
-# --- ESTILOS ---
+# --- ESTILOS COMPACTOS Y LOGO ---
 st.markdown("""
 <style>
-    .fila-tabla { padding: 8px 0; border-bottom: 1px solid #e0e0e0; }
-    .hora-grande { font-size: 1.2em; font-weight: bold; color: #d32f2f; }
-    .patente { font-size: 1.2em; font-weight: bold; color: #1565c0; text-transform: uppercase; }
-    .asesor { font-size: 0.9em; color: #666; font-style: italic; }
-    .pendiente-viejo { color: #ff9800; font-weight: bold; font-size: 0.8em; }
-    .stButton button { width: 100%; height: 45px; font-weight: bold; }
+    .main-title { font-size: 24px !important; font-weight: bold; color: #333; margin-bottom: 0px; }
+    .kpi-box { border: 1px solid #ddd; padding: 10px; border-radius: 5px; text-align: center; background-color: #f9f9f9; }
+    .kpi-val { font-size: 20px; font-weight: bold; color: #1565c0; }
+    .fila-tabla { padding: 4px 0; border-bottom: 1px solid #eee; font-size: 0.9em; }
+    .hora-txt { font-weight: bold; color: #d32f2f; font-size: 1em; }
+    .patente-txt { font-weight: bold; color: #1565c0; font-size: 1em; }
+    .small-font { font-size: 0.85em; color: #555; }
+    div[data-testid="stExpander"] { border: none !important; }
+    .stButton button { height: 32px; font-size: 0.8em; padding: 0px; }
 </style>
 """, unsafe_allow_html=True)
-
-def limpiar_hora(valor):
-    if not valor: return ""
-    v = str(valor).strip()
-    return v[:5] if len(v) > 5 else v
 
 # --- CONEXIÓN ---
 def conectar_sheet():
@@ -35,125 +33,111 @@ def conectar_sheet():
     url = "https://docs.google.com/spreadsheets/d/1zw3qrKmdK_gmGL8k_nDyC2ugWb_hMINDxNvqzE2Japo/edit"
     return client.open_by_url(url).worksheet("PLAN GENERAL")
 
+def calcular_minutos(h1, h2):
+    try:
+        fmt = "%H:%M"
+        t1 = datetime.strptime(h1, fmt)
+        t2 = datetime.strptime(h2, fmt)
+        return int((t2 - t1).total_seconds() / 60)
+    except: return 0
+
 def main():
-    st.title("🚿 Programación Lavadero")
+    # Header con logo sugerido (Peugeot/Citroen)
+    col_logo, col_tit = st.columns([1, 6])
+    with col_logo:
+        # Imagen genérica de lavado profesional (puedes cambiar la URL por una de Peugeot si prefieres)
+        st.image("https://www.peugeot.com.ar/content/dam/peugeot/argentina/service/Peugeot_Service_Logo.png", width=120)
+    with col_tit:
+        st.markdown("<h1 class='main-title'>Gestión de Lavadero - Postventa</h1>", unsafe_allow_html=True)
 
     try:
         hoja = conectar_sheet()
         raw_data = hoja.get_all_values()
         
-        # Mapeo de columnas
-        IDX_FECHA = 0      
-        IDX_ASESOR = 2     
-        IDX_DOMINIO = 3    
-        IDX_MODELO = 4     
-        IDX_PROMETIDO = 7  
-        IDX_INICIO = 8     
-        IDX_FIN = 9        
+        # Mapeo
+        IDX_FECHA, IDX_ASESOR, IDX_DOMINIO = 0, 2, 3
+        IDX_MODELO, IDX_PROMETIDO, IDX_INICIO, IDX_FIN = 4, 7, 8, 9
 
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
-        hoy_dt = datetime.now(tz_ar)
+        hoy_str = datetime.now(tz_ar).strftime("%-d/%-m/%Y")
 
-        # --- BARRA LATERAL CON FILTROS ---
-        with st.sidebar:
-            st.header("🔍 Filtros y Fecha")
-            # Selector de fecha (Calendario)
-            fecha_consulta = st.date_input("Consultar programación del día:", hoy_dt)
-            ver_todo = st.checkbox("Ver historial completo", value=False)
-            arrastrar_pendientes = st.checkbox("Incluir pendientes de días anteriores", value=True)
+        tab1, tab2 = st.tabs(["🚀 Operación Diaria", "📊 KPIs y Rendimiento"])
 
-        # Formatear fecha seleccionada para comparar con el Excel
-        f_str = fecha_consulta.strftime("%-d/%-m/%Y") # Formato 27/1/2026
-        f_str_cero = fecha_consulta.strftime("%d/%m/%Y") # Formato 27/01/2026
+        # Procesamiento de datos
+        pendientes, terminados = [], []
+        tiempos_lavado = []
 
-        lista_pendientes = []
-        lista_terminados = []
+        for i, fila in enumerate(raw_data[1:], start=2):
+            if len(fila) < 10: fila += [""] * (10 - len(fila))
+            if not fila[IDX_DOMINIO] or fila[IDX_PROMETIDO].upper() == "NO SE LAVA": continue
+            if hoy_str not in fila[IDX_FECHA] and hoy_str not in fila[IDX_PROMETIDO]: continue
 
-        for i, fila in enumerate(raw_data):
-            if i < 1: continue 
-            while len(fila) < 10: fila.append("")
+            item = {
+                "fila": i, "dominio": fila[IDX_DOMINIO], "modelo": fila[IDX_MODELO],
+                "asesor": fila[IDX_ASESOR], "prometido": fila[IDX_PROMETIDO],
+                "inicio": fila[IDX_INICIO], "fin": fila[IDX_FIN]
+            }
 
-            fecha_celda = str(fila[IDX_FECHA]).strip()
-            prometido_valor = str(fila[IDX_PROMETIDO]).strip().upper()
-            dom = str(fila[IDX_DOMINIO]).strip()
-            fin_hora = limpiar_hora(fila[IDX_FIN])
+            if item["fin"]:
+                terminados.append(item)
+                mins = calcular_minutos(item["inicio"], item["fin"])
+                if mins > 0: tiempos_lavado.append(mins)
+            else:
+                pendientes.append(item)
 
-            if not dom or prometido_valor == "NO SE LAVA": 
-                continue
-
-            es_de_hoy = f_str in fecha_celda or f_str_cero in fecha_celda or f_str in prometido_valor or f_str_cero in prometido_valor
+        with tab1:
+            # PENDIENTES
+            st.markdown(f"**Pendientes de hoy ({len(pendientes)})**")
+            if pendientes:
+                c = st.columns([1, 1, 2, 1.5, 1])
+                c[0].caption("PROMETIDO"); c[1].caption("DOMINIO"); c[2].caption("MODELO"); c[3].caption("ASESOR"); c[4].caption("ACCIÓN")
+                
+                for p in pendientes:
+                    r = st.columns([1, 1, 2, 1.5, 1])
+                    r[0].markdown(f"<span class='hora-txt'>{p['prometido']}</span>", unsafe_allow_html=True)
+                    r[1].markdown(f"<span class='patente-txt'>{p['dominio']}</span>", unsafe_allow_html=True)
+                    r[2].markdown(f"<span class='small-font'>{p['modelo']}</span>", unsafe_allow_html=True)
+                    r[3].markdown(f"<span class='small-font'>{p['asesor']}</span>", unsafe_allow_html=True)
+                    with r[4]:
+                        if not p['inicio']:
+                            if st.button("▶️", key=f"i{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_INICIO + 1, datetime.now(tz_ar).strftime("%H:%M"))
+                                st.rerun()
+                        else:
+                            if st.button("🏁", key=f"f{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN + 1, datetime.now(tz_ar).strftime("%H:%M"))
+                                st.rerun()
             
-            # Lógica para arrastrar pendientes viejos
-            es_pendiente_viejo = False
-            if arrastrar_pendientes and not fin_hora:
-                try:
-                    fecha_dt_celda = datetime.strptime(fecha_celda.split()[0], "%d/%m/%Y").date()
-                    if fecha_dt_celda < fecha_consulta:
-                        es_pendiente_viejo = True
-                except:
-                    pass
-
-            # Criterio de inclusión
-            if ver_todo or es_de_hoy or es_pendiente_viejo:
-                datos = {
-                    "fila": i + 1,
-                    "dominio": dom,
-                    "modelo": str(fila[IDX_MODELO]).strip(),
-                    "asesor": str(fila[IDX_ASESOR]).strip(),
-                    "prometido": prometido_valor,
-                    "inicio": limpiar_hora(fila[IDX_INICIO]),
-                    "fin": fin_hora,
-                    "es_viejo": es_pendiente_viejo
-                }
-
-                if datos["fin"]:
-                    lista_terminados.append(datos)
-                else:
-                    datos["orden"] = datos["prometido"] if ":" in datos["prometido"] else "23:59"
-                    lista_pendientes.append(datos)
-
-        # --- MOSTRAR PENDIENTES ---
-        st.subheader(f"📋 Pendientes ({len(lista_pendientes)}) - {fecha_consulta.strftime('%d/%m/%Y')}")
-        
-        if not lista_pendientes:
-            st.info("No hay autos pendientes.")
-        else:
-            lista_pendientes.sort(key=lambda x: x["orden"])
-            c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
-            c1.markdown("**PROMETIDO**"); c2.markdown("**DOMINIO**"); c3.markdown("**MODELO**"); c4.markdown("**ASESOR**"); c5.markdown("**ACCIÓN**")
-            st.divider()
-
-            for auto in lista_pendientes:
-                col1, col2, col3, col4, col5 = st.columns([1, 1.2, 2, 1.5, 1.5])
-                with col1: 
-                    st.markdown(f"<span class='hora-grande'>{auto['prometido']}</span>", unsafe_allow_html=True)
-                    if auto['es_viejo']:
-                        st.markdown("<span class='pendiente-viejo'>⚠️ ATRASADO</span>", unsafe_allow_html=True)
-                with col2: st.markdown(f"<span class='patente'>{auto['dominio']}</span>", unsafe_allow_html=True)
-                with col3: st.write(auto['modelo'])
-                with col4: st.markdown(f"<span class='asesor'>{auto['asesor']}</span>", unsafe_allow_html=True)
-                with col5:
-                    f_idx = auto['fila']
-                    if not auto['inicio']:
-                        if st.button("▶️ INICIAR", key=f"btn_start_{f_idx}"):
-                            hoja.update_cell(f_idx, IDX_INICIO + 1, datetime.now(tz_ar).strftime("%H:%M"))
-                            st.rerun()
-                    else:
-                        if st.button("🏁 LISTO", key=f"btn_end_{f_idx}", type="primary"):
-                            hoja.update_cell(f_idx, IDX_FIN + 1, datetime.now(tz_ar).strftime("%H:%M"))
-                            st.rerun()
-                st.markdown("<div class='fila-tabla'></div>", unsafe_allow_html=True)
-
-        # --- MOSTRAR TERMINADOS ---
-        if lista_terminados:
-            st.write("---")
-            with st.expander(f"✅ Lavados Finalizados ({len(lista_terminados)})"):
-                df_t = pd.DataFrame(lista_terminados)
-                st.dataframe(df_t[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]], 
+            st.markdown("---")
+            
+            # TERMINADOS (Ordenados por Inicio)
+            st.markdown(f"**Lavados Finalizados ({len(terminados)})**")
+            if terminados:
+                df_term = pd.DataFrame(terminados).sort_values(by="inicio")
+                st.dataframe(df_term[["inicio", "fin", "dominio", "modelo", "asesor"]], 
                              hide_index=True, use_container_width=True)
 
+        with tab2:
+            st.markdown("### Indicadores de Eficiencia (KPI)")
+            k1, k2, k3, k4 = st.columns(4)
+            
+            promedio = sum(tiempos_lavado)/len(tiempos_lavado) if tiempos_lavado else 0
+            max_tiempo = max(tiempos_lavado) if tiempos_lavado else 0
+            
+            with k1: st.markdown(f"<div class='kpi-box'>Total Lavados<br><span class='kpi-val'>{len(terminados)}</span></div>", unsafe_allow_html=True)
+            with k2: st.markdown(f"<div class='kpi-box'>Tiempo Promedio<br><span class='kpi-val'>{int(promedio)} min</span></div>", unsafe_allow_html=True)
+            with k3: st.markdown(f"<div class='kpi-box'>Tiempo Máximo<br><span class='kpi-val'>{max_tiempo} min</span></div>", unsafe_allow_html=True)
+            with k4: 
+                pend_porc = (len(pendientes)/(len(pendientes)+len(terminados))*100) if (len(pendientes)+len(terminados)) > 0 else 0
+                st.markdown(f"<div class='kpi-box'>% Pendiente<br><span class='kpi-val'>{int(pend_porc)}%</span></div>", unsafe_allow_html=True)
+
+            if tiempos_lavado:
+                st.markdown("---")
+                st.line_chart(tiempos_lavado)
+                st.caption("Evolución de tiempos de lavado (en minutos) durante el día.")
+
     except Exception as e:
-        st.error(f"Error detectado: {e}")
+        st.error(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
