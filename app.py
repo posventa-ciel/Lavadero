@@ -12,20 +12,13 @@ st.set_page_config(page_title="Lavadero Pro", layout="wide")
 # --- ESTILOS ---
 st.markdown("""
 <style>
-    .fila-tabla { padding: 8px 0; border-bottom: 1px solid #e0e0e0; }
-    .hora-grande { font-size: 1.2em; font-weight: bold; color: #d32f2f; }
-    .patente { font-size: 1.2em; font-weight: bold; color: #1565c0; text-transform: uppercase; }
-    .asesor { font-size: 0.9em; color: #666; font-style: italic; }
-    .stButton button { width: 100%; height: 45px; font-weight: bold; }
+    .fila-tabla { padding: 8px 0; border-bottom: 1px solid #eee; }
+    .hora-grande { font-size: 1.1em; font-weight: bold; color: #d32f2f; }
+    .patente { font-size: 1.1em; font-weight: bold; color: #1565c0; }
+    .asesor { font-size: 0.85em; color: #666; }
+    .stButton button { width: 100%; height: 35px; padding: 0; }
 </style>
 """, unsafe_allow_html=True)
-
-# --- LIMPIEZA DE HORA ---
-def limpiar_hora(valor):
-    if not valor: return ""
-    v = str(valor).strip()
-    if len(v) > 5: return v[:5]
-    return v
 
 # --- CONEXIÓN ---
 def conectar_sheet():
@@ -43,115 +36,122 @@ def main():
         hoja = conectar_sheet()
         raw_data = hoja.get_all_values()
         
-        # --- MAPEO POR LETRAS DE EXCEL (A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9) ---
-        IDX_FECHA = 0      # Columna A
-        IDX_ASESOR = 2     # Columna C
-        IDX_DOMINIO = 3    # Columna D
-        IDX_MODELO = 4     # Columna E
-        IDX_PROMETIDO = 7  # Columna H
-        IDX_INICIO = 8     # Columna I
-        IDX_FIN = 9        # Columna J
-
-        # --- FECHA DE HOY ---
-        tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
-        ahora = datetime.now(tz_ar)
+        # --- 1. BUSCAR FILA DE TÍTULOS ---
+        idx_fila_titulos = -1
+        for i, fila in enumerate(raw_data[:15]):
+            fila_clean = [str(c).strip().upper() for c in fila]
+            if "DOMINIO" in fila_clean:
+                idx_fila_titulos = i
+                titulos_reales = [str(c).strip() for c in fila]
+                break
         
-        # Formatos de texto para hoy (ej: 27/1 y 27/01)
-        f1 = f"{ahora.day}/{ahora.month}"
-        f2 = f"{ahora.day:02d}/{ahora.month:02d}"
+        if idx_fila_titulos == -1:
+            st.error("No se encontró la columna 'DOMINIO'. Revisa los títulos del Excel.")
+            st.stop()
 
-        with st.sidebar:
-            st.header("⚙️ Configuración")
-            st.info(f"Buscando fecha: {f1} o {f2}")
-            ver_todo = st.checkbox("Ver todo el listado", value=False)
+        # --- 2. MAPEO DE COLUMNAS POR NOMBRE ---
+        # Buscamos en qué posición está cada cosa según lo que vos escribiste
+        def buscar_idx(nombre_buscado):
+            for i, t in enumerate(titulos_reales):
+                if nombre_buscado.upper() in t.upper():
+                    return i
+            return -1
 
-        lista_pendientes = []
-        lista_terminados = []
+        # Mapeamos según tus datos: FECHA(A), ASESOR(C), DOMINIO(D), MODELO(E), PROMETIDO(H)
+        idx_fecha = buscar_idx("FECHA")
+        idx_asesor = buscar_idx("ASESOR")
+        idx_dominio = buscar_idx("DOMINIO")
+        idx_modelo = buscar_idx("MODELO")
+        idx_prometido = buscar_idx("PROMETIDO")
+        idx_inicio = buscar_idx("INICIO")
+        idx_fin = buscar_idx("FIN")
 
-        # Recorremos los datos (saltando la fila de títulos)
+        # --- 3. PROCESAR DATOS ---
+        tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
+        hoy = datetime.now(tz_ar).date()
+
+        pendientes = []
+        terminados = []
+
         for i, fila in enumerate(raw_data):
-            if i < 1: continue 
+            if i <= idx_fila_titulos: continue
             
-            # Rellenar si la fila es corta
-            while len(fila) < 10: fila.append("")
+            # Rellenar fila si es corta
+            while len(fila) < len(titulos_reales): fila.append("")
 
-            # Chequeo de Fecha
-            fecha_celda = str(fila[IDX_FECHA]).strip()
+            # --- LIMPIEZA DE FECHA ---
+            fecha_raw = fila[idx_fecha].strip()
+            if not fecha_raw: continue
             
-            if ver_todo or (f1 in fecha_celda or f2 in fecha_celda):
-                dom = str(fila[IDX_DOMINIO]).strip()
-                if not dom: continue # Saltear si no hay patente
+            # Intentamos convertir la fecha del Excel a algo que Python entienda
+            fecha_celda = pd.to_datetime(fecha_raw, dayfirst=True, errors='coerce').date()
 
-                datos = {
+            if fecha_celda == hoy:
+                # Si tiene FIN, va a la lista de abajo
+                h_fin = str(fila[idx_fin]).strip()
+                
+                item = {
                     "fila": i + 1,
-                    "dominio": dom,
-                    "modelo": str(fila[IDX_MODELO]).strip(),
-                    "asesor": str(fila[IDX_ASESOR]).strip(),
-                    "prometido": limpiar_hora(fila[IDX_PROMETIDO]),
-                    "inicio": limpiar_hora(fila[IDX_INICIO]),
-                    "fin": limpiar_hora(fila[IDX_FIN])
+                    "prometido": str(fila[idx_prometido]).strip()[:5],
+                    "dominio": str(fila[idx_dominio]).strip(),
+                    "modelo": str(fila[idx_modelo]).strip(),
+                    "asesor": str(fila[idx_asesor]).strip(),
+                    "inicio": str(fila[idx_inicio]).strip()[:5],
+                    "fin": h_fin[:5]
                 }
 
-                if datos["fin"]:
-                    lista_terminados.append(datos)
+                if h_fin:
+                    terminados.append(item)
                 else:
-                    # Si no hay horario, mandarlo al final
-                    datos["orden"] = datos["prometido"] if datos["prometido"] else "23:59"
-                    lista_pendientes.append(datos)
+                    # Valor para ordenar (si no hay hora, va al final)
+                    item["orden"] = item["prometido"] if item["prometido"] else "23:59"
+                    pendientes.append(item)
 
-        # --- TABLA PENDIENTES ---
-        st.subheader(f"📋 Pendientes ({len(lista_pendientes)})")
-        
-        if not lista_pendientes:
-            st.warning("No hay autos pendientes para hoy.")
+        # --- 4. MOSTRAR INTERFAZ ---
+        # TABLA PENDIENTES
+        st.subheader(f"📋 Pendientes ({len(pendientes)})")
+        if not pendientes:
+            st.info("No hay autos pendientes.")
         else:
-            # ORDENAR DE MÁS TEMPRANO A MÁS TARDE
-            lista_pendientes.sort(key=lambda x: x["orden"])
+            pendientes.sort(key=lambda x: x["orden"])
+            
+            # Encabezados compactos
+            cols = st.columns([1, 1.2, 2, 1.5, 1.2])
+            cols[0].caption("PROMETIDO")
+            cols[1].caption("DOMINIO")
+            cols[2].caption("MODELO")
+            cols[3].caption("ASESOR")
+            cols[4].caption("ACCIÓN")
+            st.markdown("---")
 
-            # Encabezados
-            c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
-            c1.markdown("**PROMETIDO**")
-            c2.markdown("**DOMINIO**")
-            c3.markdown("**MODELO**")
-            c4.markdown("**ASESOR**")
-            c5.markdown("**ESTADO / ACCIÓN**")
-            st.markdown("<hr style='margin:2px 0'>", unsafe_allow_html=True)
-
-            for auto in lista_pendientes:
-                c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
+            for auto in pendientes:
+                c = st.columns([1, 1.2, 2, 1.5, 1.2])
+                c[0].markdown(f"<span class='hora-grande'>{auto['prometido']}</span>", unsafe_allow_html=True)
+                c[1].markdown(f"<span class='patente'>{auto['dominio']}</span>", unsafe_allow_html=True)
+                c[2].write(auto['modelo'])
+                c[3].markdown(f"<span class='asesor'>{auto['asesor']}</span>", unsafe_allow_html=True)
                 
-                h_show = auto['prometido'] if auto['prometido'] else "--:--"
-                
-                with c1: st.markdown(f"<span class='hora-grande'>{h_show}</span>", unsafe_allow_html=True)
-                with c2: st.markdown(f"<span class='patente'>{auto['dominio']}</span>", unsafe_allow_html=True)
-                with c3: st.write(auto['modelo'])
-                with c4: st.markdown(f"<span class='asesor'>{auto['asesor']}</span>", unsafe_allow_html=True)
-                with c5:
-                    num_fila = auto['fila']
+                with c[4]:
                     if not auto['inicio']:
-                        if st.button("▶️ INICIAR", key=f"s_{num_fila}"):
+                        if st.button("▶️ Iniciar", key=f"s_{auto['fila']}"):
                             h_act = datetime.now(tz_ar).strftime("%H:%M")
-                            hoja.update_cell(num_fila, IDX_INICIO + 1, h_act)
+                            hoja.update_cell(auto['fila'], idx_inicio + 1, h_act)
                             st.rerun()
                     else:
-                        st.caption(f"En proceso ({auto['inicio']})")
-                        if st.button("🏁 LISTO", key=f"e_{num_fila}", type="primary"):
+                        if st.button("🏁 Listo", key=f"e_{auto['fila']}", type="primary"):
                             h_act = datetime.now(tz_ar).strftime("%H:%M")
-                            hoja.update_cell(num_fila, IDX_FIN + 1, h_act)
+                            hoja.update_cell(auto['fila'], idx_fin + 1, h_act)
+                            st.balloons()
                             st.rerun()
-                
-                st.markdown("<div class='fila-tabla'></div>", unsafe_allow_html=True)
 
-        # --- TABLA TERMINADOS ---
-        if lista_terminados:
+        # TABLA TERMINADOS
+        if terminados:
             st.write("---")
-            with st.expander(f"✅ Lavados Finalizados Hoy ({len(lista_terminados)})"):
-                df_t = pd.DataFrame(lista_terminados)
-                st.dataframe(df_t[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]], hide_index=True, use_container_width=True)
+            with st.expander(f"✅ Lavados Finalizados ({len(terminados)})"):
+                st.table(pd.DataFrame(terminados)[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]])
 
     except Exception as e:
-        st.error("Error inesperado:")
-        st.write(e)
+        st.error(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
