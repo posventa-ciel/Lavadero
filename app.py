@@ -2,19 +2,19 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, date
+from datetime import datetime
 import json
 import pytz
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Lavadero Pro", layout="wide")
+st.set_page_config(page_title="Lavadero Pro Peugeot/Citroën", layout="wide")
 
 # --- ESTILOS COMPACTOS ---
 st.markdown("""
 <style>
-    .main-title { font-size: 22px !important; font-weight: bold; color: #333; margin-top: -10px; }
-    .kpi-box { border: 1px solid #ddd; padding: 8px; border-radius: 5px; text-align: center; background-color: #f9f9f9; }
-    .kpi-val { font-size: 18px; font-weight: bold; color: #1565c0; }
+    .main-title { font-size: 22px !important; font-weight: bold; color: #00235d; margin-top: -10px; }
+    .kpi-box { border: 1px solid #ddd; padding: 8px; border-radius: 5px; text-align: center; background-color: #f1f3f6; }
+    .kpi-val { font-size: 18px; font-weight: bold; color: #00235d; }
     .fila-tabla { padding: 4px 0; border-bottom: 1px solid #eee; font-size: 0.85em; }
     .hora-txt { font-weight: bold; color: #d32f2f; font-size: 0.95em; }
     .patente-txt { font-weight: bold; color: #1565c0; font-size: 0.95em; }
@@ -41,13 +41,13 @@ def calcular_minutos(h1, h2):
     except: return 0
 
 def main():
-    # Header con Imagen (Usando una imagen estable de lavado)
-    col_img, col_tit = st.columns([1, 5])
+    # Header con Imagen de Peugeot Lavándose
+    col_img, col_tit = st.columns([1.2, 5])
     with col_img:
-        # Imagen de un auto siendo lavado para Peugeot/Citroen
-        st.image("https://cdn-icons-png.flaticon.com/512/2311/2311438.png", width=70)
+        # Imagen de Peugeot lavándose
+        st.image("https://www.peugeot.com.ar/content/dam/peugeot/argentina/service/Peugeot_Service_Logo.png", width=140)
     with col_tit:
-        st.markdown("<h1 class='main-title'>Gestión de Lavadero - Postventa</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 class='main-title'>Gestión de Lavadero - Concesionario Oficial</h1>", unsafe_allow_html=True)
 
     try:
         hoja = conectar_sheet()
@@ -60,33 +60,30 @@ def main():
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
         hoy_dt = datetime.now(tz_ar)
 
-        # --- FILTRO DE FECHA EN SIDEBAR ---
+        # --- FILTRO DE FECHA ---
         with st.sidebar:
-            st.header("📅 Calendario")
-            fecha_sel = st.date_input("Consultar día:", hoy_dt)
-            # Formatos de fecha para buscar en el Excel
+            st.header("📅 Control de Fecha")
+            fecha_sel = st.date_input("Día de trabajo:", hoy_dt)
             f_str = fecha_sel.strftime("%-d/%-m/%Y")
             f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
-        tab1, tab2 = st.tabs(["🚀 Operación Diaria", "📊 KPIs y Rendimiento"])
+        tab1, tab2 = st.tabs(["🚀 Operación Diaria", "📊 KPIs y Tiempos"])
 
         pendientes, terminados = [], []
         tiempos_lavado = []
 
-        # Procesamiento
         for i, fila in enumerate(raw_data[1:], start=2):
             if len(fila) < 10: fila += [""] * (10 - len(fila))
             
-            # FILTRO: Sacamos "NO SE LAVA" y "NO VINO"
             estado_prometido = fila[IDX_PROMETIDO].upper()
+            # FILTRO: Sacamos los que NO VINIERON o NO SE LAVAN
             if not fila[IDX_DOMINIO] or "NO SE LAVA" in estado_prometido or "NO VINO" in estado_prometido:
                 continue
 
             fecha_celda = fila[IDX_FECHA]
-            # Detectar si es de la fecha seleccionada o si es un pendiente viejo
             es_fecha_sel = f_str in fecha_celda or f_str_cero in fecha_celda or f_str in estado_prometido or f_str_cero in estado_prometido
             
-            # Arrastre de pendientes sin terminar de días anteriores
+            # Pendientes de días anteriores
             es_pendiente_viejo = False
             if not fila[IDX_FIN]:
                 try:
@@ -110,15 +107,15 @@ def main():
                     pendientes.append(item)
 
         with tab1:
-            st.markdown(f"**Pendientes ({len(pendientes)}) - {fecha_sel.strftime('%d/%m')}**")
+            st.markdown(f"**Programación ({len(pendientes)}) - {fecha_sel.strftime('%d/%m/%Y')}**")
             if pendientes:
                 c = st.columns([1, 1, 2, 1.5, 1])
                 c[0].caption("PROMETIDO"); c[1].caption("DOMINIO"); c[2].caption("MODELO"); c[3].caption("ASESOR"); c[4].caption("ACCIÓN")
                 
                 for p in pendientes:
                     r = st.columns([1, 1, 2, 1.5, 1])
-                    atraso_tag = "⚠️ " if p['atrasado'] else ""
-                    r[0].markdown(f"<span class='hora-txt'>{atraso_tag}{p['prometido']}</span>", unsafe_allow_html=True)
+                    atraso_prefix = "⚠️ " if p['atrasado'] else ""
+                    r[0].markdown(f"<span class='hora-txt'>{atraso_prefix}{p['prometido']}</span>", unsafe_allow_html=True)
                     r[1].markdown(f"<span class='patente-txt'>{p['dominio']}</span>", unsafe_allow_html=True)
                     r[2].markdown(f"<span class='small-font'>{p['modelo']}</span>", unsafe_allow_html=True)
                     r[3].markdown(f"<span class='small-font'>{p['asesor']}</span>", unsafe_allow_html=True)
@@ -135,22 +132,25 @@ def main():
             st.markdown("---")
             st.markdown(f"**Unidades Terminadas ({len(terminados)})**")
             if terminados:
+                # Ordenamos cronológicamente por hora de inicio
                 df_term = pd.DataFrame(terminados).sort_values(by="inicio")
                 st.dataframe(df_term[["inicio", "fin", "dominio", "modelo", "asesor"]], 
                              hide_index=True, use_container_width=True)
 
         with tab2:
-            st.markdown("### Rendimiento del Día")
+            st.markdown("### Indicadores de Eficiencia")
             k1, k2, k3 = st.columns(3)
             promedio = sum(tiempos_lavado)/len(tiempos_lavado) if tiempos_lavado else 0
+            max_t = max(tiempos_lavado) if tiempos_lavado else 0
             
-            with k1: st.markdown(f"<div class='kpi-box'>Lavados Realizados<br><span class='kpi-val'>{len(terminados)}</span></div>", unsafe_allow_html=True)
-            with k2: st.markdown(f"<div class='kpi-box'>Promedio por Auto<br><span class='kpi-val'>{int(promedio)} min</span></div>", unsafe_allow_html=True)
-            with k3: st.markdown(f"<div class='kpi-box'>Pendientes de Lavar<br><span class='kpi-val'>{len(pendientes)}</span></div>", unsafe_allow_html=True)
+            with k1: st.markdown(f"<div class='kpi-box'>Lavados Totales<br><span class='kpi-val'>{len(terminados)}</span></div>", unsafe_allow_html=True)
+            with k2: st.markdown(f"<div class='kpi-box'>Promedio Lavado<br><span class='kpi-val'>{int(promedio)} min</span></div>", unsafe_allow_html=True)
+            with k3: st.markdown(f"<div class='kpi-box'>Lavado más largo<br><span class='kpi-val'>{max_t} min</span></div>", unsafe_allow_html=True)
 
             if tiempos_lavado:
                 st.markdown("---")
                 st.line_chart(tiempos_lavado)
+                st.caption("Minutos por unidad lavada a lo largo del día.")
 
     except Exception as e:
         st.error(f"Error: {e}")
