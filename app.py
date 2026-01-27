@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import pytz 
 
@@ -16,6 +16,7 @@ st.markdown("""
     .hora-grande { font-size: 1.2em; font-weight: bold; color: #d32f2f; }
     .patente { font-size: 1.2em; font-weight: bold; color: #1565c0; text-transform: uppercase; }
     .asesor { font-size: 0.9em; color: #666; font-style: italic; }
+    .pendiente-viejo { color: #ff9800; font-weight: bold; font-size: 0.8em; }
     .stButton button { width: 100%; height: 45px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
@@ -41,9 +42,7 @@ def main():
         hoja = conectar_sheet()
         raw_data = hoja.get_all_values()
         
-        # --- NUEVO MAPEO SEGÚN TU IMAGEN ---
-        # A=0 (Fecha), B=1 (Hora Recep), C=2 (Asesor), D=3 (Dominio), 
-        # E=4 (Modelo), H=7 (Prometido), I=8 (Inicio), J=9 (Fin)
+        # Mapeo de columnas
         IDX_FECHA = 0      
         IDX_ASESOR = 2     
         IDX_DOMINIO = 3    
@@ -53,37 +52,49 @@ def main():
         IDX_FIN = 9        
 
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
-        ahora = datetime.now(tz_ar)
-        
-        # Formatos de fecha para filtrar
-        f1 = f"{ahora.day}/{ahora.month}/{ahora.year}"
-        f2 = f"{ahora.day}/{ahora.month}" # Por si acaso el formato es corto
+        hoy_dt = datetime.now(tz_ar)
 
+        # --- BARRA LATERAL CON FILTROS ---
         with st.sidebar:
-            st.header("⚙️ Configuración")
-            ver_todo = st.checkbox("Ver todos los registros", value=False)
+            st.header("🔍 Filtros y Fecha")
+            # Selector de fecha (Calendario)
+            fecha_consulta = st.date_input("Consultar programación del día:", hoy_dt)
+            ver_todo = st.checkbox("Ver historial completo", value=False)
+            arrastrar_pendientes = st.checkbox("Incluir pendientes de días anteriores", value=True)
+
+        # Formatear fecha seleccionada para comparar con el Excel
+        f_str = fecha_consulta.strftime("%-d/%-m/%Y") # Formato 27/1/2026
+        f_str_cero = fecha_consulta.strftime("%d/%m/%Y") # Formato 27/01/2026
 
         lista_pendientes = []
         lista_terminados = []
 
-        # Recorremos desde la fila 2 (índice 1) para saltar el encabezado azul
         for i, fila in enumerate(raw_data):
             if i < 1: continue 
-            
-            # Asegurar que la fila tenga suficientes columnas
             while len(fila) < 10: fila.append("")
 
             fecha_celda = str(fila[IDX_FECHA]).strip()
             prometido_valor = str(fila[IDX_PROMETIDO]).strip().upper()
+            dom = str(fila[IDX_DOMINIO]).strip()
+            fin_hora = limpiar_hora(fila[IDX_FIN])
 
-            # Filtramos por fecha de hoy o "Ver todo"
-            if ver_todo or (f1 in fecha_celda or f2 in fecha_celda):
-                
-                # Ignorar si no hay dominio o si dice "NO SE LAVA"
-                dom = str(fila[IDX_DOMINIO]).strip()
-                if not dom or prometido_valor == "NO SE LAVA": 
-                    continue
+            if not dom or prometido_valor == "NO SE LAVA": 
+                continue
 
+            es_de_hoy = f_str in fecha_celda or f_str_cero in fecha_celda or f_str in prometido_valor or f_str_cero in prometido_valor
+            
+            # Lógica para arrastrar pendientes viejos
+            es_pendiente_viejo = False
+            if arrastrar_pendientes and not fin_hora:
+                try:
+                    fecha_dt_celda = datetime.strptime(fecha_celda.split()[0], "%d/%m/%Y").date()
+                    if fecha_dt_celda < fecha_consulta:
+                        es_pendiente_viejo = True
+                except:
+                    pass
+
+            # Criterio de inclusión
+            if ver_todo or es_de_hoy or es_pendiente_viejo:
                 datos = {
                     "fila": i + 1,
                     "dominio": dom,
@@ -91,31 +102,33 @@ def main():
                     "asesor": str(fila[IDX_ASESOR]).strip(),
                     "prometido": prometido_valor,
                     "inicio": limpiar_hora(fila[IDX_INICIO]),
-                    "fin": limpiar_hora(fila[IDX_FIN])
+                    "fin": fin_hora,
+                    "es_viejo": es_pendiente_viejo
                 }
 
-                if datos["fin"] and datos["fin"] != "":
+                if datos["fin"]:
                     lista_terminados.append(datos)
                 else:
-                    # Usamos el horario para ordenar, si no tiene va al final
                     datos["orden"] = datos["prometido"] if ":" in datos["prometido"] else "23:59"
                     lista_pendientes.append(datos)
 
-        # --- CUADRO 1: PENDIENTES ---
-        st.subheader(f"📋 Pendientes de Lavar ({len(lista_pendientes)})")
+        # --- MOSTRAR PENDIENTES ---
+        st.subheader(f"📋 Pendientes ({len(lista_pendientes)}) - {fecha_consulta.strftime('%d/%m/%Y')}")
+        
         if not lista_pendientes:
-            st.info("No hay autos pendientes para lavar en esta fecha.")
+            st.info("No hay autos pendientes.")
         else:
-            # Ordenar por horario prometido
             lista_pendientes.sort(key=lambda x: x["orden"])
-            
             c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
             c1.markdown("**PROMETIDO**"); c2.markdown("**DOMINIO**"); c3.markdown("**MODELO**"); c4.markdown("**ASESOR**"); c5.markdown("**ACCIÓN**")
             st.divider()
 
             for auto in lista_pendientes:
                 col1, col2, col3, col4, col5 = st.columns([1, 1.2, 2, 1.5, 1.5])
-                with col1: st.markdown(f"<span class='hora-grande'>{auto['prometido']}</span>", unsafe_allow_html=True)
+                with col1: 
+                    st.markdown(f"<span class='hora-grande'>{auto['prometido']}</span>", unsafe_allow_html=True)
+                    if auto['es_viejo']:
+                        st.markdown("<span class='pendiente-viejo'>⚠️ ATRASADO</span>", unsafe_allow_html=True)
                 with col2: st.markdown(f"<span class='patente'>{auto['dominio']}</span>", unsafe_allow_html=True)
                 with col3: st.write(auto['modelo'])
                 with col4: st.markdown(f"<span class='asesor'>{auto['asesor']}</span>", unsafe_allow_html=True)
@@ -131,13 +144,13 @@ def main():
                             st.rerun()
                 st.markdown("<div class='fila-tabla'></div>", unsafe_allow_html=True)
 
-        # --- CUADRO 2: TERMINADOS ---
+        # --- MOSTRAR TERMINADOS ---
         if lista_terminados:
             st.write("---")
-            st.subheader(f"✅ Lavados Finalizados ({len(lista_terminados)})")
-            df_t = pd.DataFrame(lista_terminados)
-            st.dataframe(df_t[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]], 
-                         hide_index=True, use_container_width=True)
+            with st.expander(f"✅ Lavados Finalizados ({len(lista_terminados)})"):
+                df_t = pd.DataFrame(lista_terminados)
+                st.dataframe(df_t[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]], 
+                             hide_index=True, use_container_width=True)
 
     except Exception as e:
         st.error(f"Error detectado: {e}")
