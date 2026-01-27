@@ -7,24 +7,30 @@ import json
 import pytz 
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Lavadero", layout="wide")
+st.set_page_config(page_title="Tablero Lavadero", layout="wide")
 
 # --- ESTILOS ---
 st.markdown("""
 <style>
-    .fila-tabla { padding: 10px; border-bottom: 1px solid #eee; }
-    .hora { color: #d32f2f; font-weight: bold; font-size: 1.2em; }
-    .patente { color: #1565c0; font-weight: bold; font-size: 1.2em; }
-    .modelo { font-weight: 500; color: #333; }
-    .asesor { color: #666; font-size: 0.9em; }
+    .fila-tabla { padding: 8px 0; border-bottom: 1px solid #e0e0e0; }
+    .hora-grande { font-size: 1.3em; font-weight: bold; color: #d32f2f; }
+    .patente { font-size: 1.2em; font-weight: bold; color: #1976d2; }
+    .asesor { font-size: 0.9em; color: #555; font-style: italic; }
+    .modelo { font-weight: 500; }
+    div[data-testid="stExpander"] details { border: 1px solid #eee; border-radius: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- LIMPIEZA DE HORA ---
+# --- FUNCIÓN PARA LIMPIAR HORAS ---
 def limpiar_hora(valor):
+    """Limpia cualquier formato raro que venga del Excel"""
     if not valor: return ""
     v = str(valor).strip()
-    if len(v) > 5 and ":" in v: return v[:5] # Corta segundos
+    if v == "": return ""
+    # Si viene fecha completa "2026-01-27 15:00:00"
+    if " " in v: return v.split(" ")[-1][:5]
+    # Si viene con segundos "15:00:00"
+    if len(v) > 5: return v[:5]
     return v
 
 # --- CONEXIÓN ---
@@ -37,172 +43,131 @@ def conectar_sheet():
     return client.open_by_url(url).sheet1
 
 def main():
-    st.title("🚿 Tablero de Lavadero")
+    st.title("🚿 Programación del Día")
 
     try:
         hoja = conectar_sheet()
-        data = hoja.get_all_values()
+        # Leemos TODO el contenido
+        raw_data = hoja.get_all_values()
         
-        # --- BUSCADOR DE CABECERA ---
-        fila_titulos = -1
-        # Buscamos la fila que tenga "DOMINIO" (o "Dominio")
-        for i, fila in enumerate(data[:20]):
-            fila_upper = [str(c).strip().upper() for c in fila]
-            if "DOMINIO" in fila_upper:
-                fila_titulos = i
-                break
+        # --- MAPEO MANUAL DE COLUMNAS (Indice 0 = Columna A) ---
+        IDX_FECHA = 0      # Col A
+        IDX_ASESOR = 2     # Col C
+        IDX_DOMINIO = 3    # Col D
+        IDX_MODELO = 4     # Col E
+        IDX_PROMETIDO = 7  # Col H
         
-        if fila_titulos == -1:
-            st.error("🚨 No encuentro la columna 'DOMINIO'.")
-            st.stop()
+        # ASUMIMOS ESTAS DOS (Si están mal, cámbialas aquí)
+        IDX_INICIO = 8     # Col I
+        IDX_FIN = 9        # Col J
 
-        # Armamos DataFrame
-        headers = [str(h).strip() for h in data[fila_titulos]]
-        df = pd.DataFrame(data[fila_titulos+1:], columns=headers)
-
-        # --- DETECCIÓN DE COLUMNAS (Inteligente) ---
-        # Buscamos el nombre real de la columna en el Excel parecida a lo que queremos
-        def buscar_columna(posibles_nombres):
-            for real in headers:
-                if real.upper() in [p.upper() for p in posibles_nombres]:
-                    return real
-            return None
-
-        col_fecha = df.columns[0] # Asumimos col A
-        col_patente = buscar_columna(["DOMINIO", "PATENTE"])
-        col_modelo = buscar_columna(["MODELO", "VEHICULO"])
-        col_asesor = buscar_columna(["ASESOR", "ASESOR SERVICIO"])
-        col_prometido = buscar_columna(["HORARIO PROMETIDO", "HORA PROM", "PROMESA"])
-        col_inicio = buscar_columna(["INICIO", "HORA INICIO"])
-        col_fin = buscar_columna(["FIN", "HORA FIN", "TERMINADO"])
-
-        # --- LOGICA "ANTI-HUECOS" (Relleno hacia abajo) ---
-        # Si la celda de fecha está vacía, repite la fecha de arriba
-        df[col_fecha] = df[col_fecha].replace("", pd.NA).ffill()
-        # Quitamos filas que sigan vacías después del relleno (filas en blanco reales)
-        df = df.dropna(subset=[col_fecha])
-
-        # --- SELECTOR DE FECHA (BARRA LATERAL) ---
-        # Obtenemos todas las fechas únicas que hay en la planilla
-        fechas_disponibles = df[col_fecha].unique().tolist()
-        
-        # Intentamos seleccionar la de HOY automáticamente
+        # --- FILTRADO DE FECHA ---
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
-        hoy_str_1 = datetime.now(tz_ar).strftime("%d/%m/%Y") # Formato 27/01/2026
-        hoy_str_2 = datetime.now(tz_ar).strftime("%-d/%-m/%Y") # Formato 27/1/2026 (sin ceros)
+        hoy_dt = datetime.now(tz_ar).date()
         
-        index_default = 0
-        if fechas_disponibles:
-            # Buscamos si hoy está en la lista (al final suele ser lo más reciente)
-            for f in reversed(fechas_disponibles):
-                if hoy_str_1 in str(f) or hoy_str_2 in str(f):
-                    index_default = fechas_disponibles.index(f)
-                    break
-            else:
-                index_default = len(fechas_disponibles) - 1 # Si no encuentra hoy, elige la última
+        # Listas para guardar los datos procesados
+        lista_pendientes = []
+        lista_terminados = []
 
-        with st.sidebar:
-            st.header("📅 Filtros")
-            fecha_selec = st.selectbox("Elegir Fecha:", fechas_disponibles, index=index_default)
+        # Recorremos fila por fila (Saltamos las primeras 3 de títulos)
+        for i, fila in enumerate(raw_data):
+            if i < 3: continue # Ignoramos encabezados
             
-            st.divider()
-            st.write("🔍 **Debug:**")
-            st.write(f"Columnas detectadas:")
-            st.code(f"Fecha: {col_fecha}\nPatente: {col_patente}\nAsesor: {col_asesor}\nHora: {col_prometido}")
+            # Seguridad: Si la fila está vacía o muy corta, la saltamos
+            if len(fila) <= IDX_PROMETIDO: continue
 
-        # --- FILTRADO ---
-        df_hoy = df[df[col_fecha] == fecha_selec].copy()
+            # 1. Leer FECHA (Columna A)
+            fecha_txt = fila[IDX_FECHA]
+            
+            # Si la fecha está vacía, usamos un truco: miramos la fila anterior (Relleno)
+            # (Simplificación: Por ahora exigimos que tenga fecha, o usamos lógica de "hoy")
+            
+            # Normalizamos fecha
+            try:
+                # Intenta convertir el texto a fecha
+                fecha_fila = pd.to_datetime(fecha_txt, dayfirst=True, errors='coerce').date()
+            except:
+                continue # Si no es fecha, saltar
 
-        # Limpieza de hora prometida
-        if col_prometido:
-             df_hoy[col_prometido] = df_hoy[col_prometido].apply(limpiar_hora)
+            # 2. SI LA FECHA ES HOY, PROCESAMOS
+            if fecha_fila == hoy_dt:
+                
+                # Extraemos datos usando los ÍNDICES FIJOS
+                datos = {
+                    "fila_excel": i + 1, # +1 porque gspread empieza en 1
+                    "dominio": fila[IDX_DOMINIO],
+                    "modelo": fila[IDX_MODELO],
+                    "asesor": fila[IDX_ASESOR],
+                    "prometido": limpiar_hora(fila[IDX_PROMETIDO]),
+                    "inicio": limpiar_hora(fila[IDX_INICIO]) if len(fila) > IDX_INICIO else "",
+                    "fin": limpiar_hora(fila[IDX_FIN]) if len(fila) > IDX_FIN else ""
+                }
 
-        # SEPARAR PENDIENTES / TERMINADOS
-        pendientes = df_hoy[df_hoy[col_fin].fillna("").astype(str).str.strip() == ""].copy()
-        terminados = df_hoy[df_hoy[col_fin].fillna("").astype(str).str.strip() != ""].copy()
+                # Clasificar: Terminado o Pendiente
+                if datos["fin"]:
+                    lista_terminados.append(datos)
+                else:
+                    # Lógica de ordenamiento para pendientes
+                    # Si no tiene hora prometida, le ponemos "23:59" para que vaya al fondo
+                    datos["orden"] = datos["prometido"] if datos["prometido"] else "23:59"
+                    lista_pendientes.append(datos)
 
-        # --- TABLA PENDIENTES ---
-        st.subheader(f"📋 Pendientes ({len(pendientes)})")
-        
-        if not pendientes.empty:
-            # Ordenar
-            if col_prometido:
-                pendientes['orden'] = pendientes[col_prometido].replace("", "23:59")
-                pendientes = pendientes.sort_values('orden')
+        # --- MOSTRAR PENDIENTES ---
+        st.subheader(f"📋 A Lavar ({len(lista_pendientes)}) - {hoy_dt.strftime('%d/%m')}")
+
+        if not lista_pendientes:
+            st.info("✅ No hay vehículos pendientes para hoy.")
+        else:
+            # Ordenar por horario
+            lista_pendientes.sort(key=lambda x: x["orden"])
 
             # Encabezados
             c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
             c1.markdown("**HORA**")
-            c2.markdown("**PATENTE**")
+            c2.markdown("**DOMINIO**")
             c3.markdown("**MODELO**")
             c4.markdown("**ASESOR**")
             c5.markdown("**ACCIÓN**")
             st.markdown("<hr style='margin:5px 0'>", unsafe_allow_html=True)
 
-            for i, row in pendientes.iterrows():
-                # Búsqueda de Fila Excel
-                pat = row[col_patente]
-                mod = row.get(col_modelo, "")
-                
-                # Buscamos coincidencia exacta en raw data
-                fila_excel = -1
-                for idx_raw, linea in enumerate(data):
-                    if idx_raw > fila_titulos:
-                        # Comparamos Patente
-                        val_pat = str(linea[headers.index(col_patente)]).strip()
-                        if val_pat == str(pat).strip():
-                            # Comparamos Modelo (si existe) para desempatar
-                            if col_modelo:
-                                val_mod = str(linea[headers.index(col_modelo)]).strip()
-                                if val_mod == str(mod).strip():
-                                    fila_excel = idx_raw + 1
-                                    break
-                            else:
-                                fila_excel = idx_raw + 1
-                                break
-                
-                if fila_excel == -1: continue
-
-                # Mostrar Fila
-                prom = row.get(col_prometido, "")
-                ases = row.get(col_asesor, "")
-                ini = str(row.get(col_inicio, "")).strip()
-
+            for auto in lista_pendientes:
                 c1, c2, c3, c4, c5 = st.columns([1, 1.2, 2, 1.5, 1.5])
                 
-                with c1: st.markdown(f"<span class='hora'>{prom}</span>", unsafe_allow_html=True)
-                with c2: st.markdown(f"<span class='patente'>{pat}</span>", unsafe_allow_html=True)
-                with c3: st.markdown(f"<span class='modelo'>{mod}</span>", unsafe_allow_html=True)
-                with c4: st.markdown(f"<span class='asesor'>{ases}</span>", unsafe_allow_html=True)
+                with c1: st.markdown(f"<span class='hora-grande'>{auto['prometido']}</span>", unsafe_allow_html=True)
+                with c2: st.markdown(f"<span class='patente'>{auto['dominio']}</span>", unsafe_allow_html=True)
+                with c3: st.write(auto['modelo'])
+                with c4: st.markdown(f"<span class='asesor'>{auto['asesor']}</span>", unsafe_allow_html=True)
                 with c5:
-                    idx_ini = headers.index(col_inicio) + 1
-                    idx_fin = headers.index(col_fin) + 1
-                    
-                    if not ini:
-                        if st.button("▶️ Iniciar", key=f"s_{fila_excel}", type="secondary"):
+                    fila = auto['fila_excel']
+                    if not auto['inicio']:
+                        if st.button("▶️ Iniciar", key=f"s_{fila}", type="secondary"):
                             h = datetime.now(tz_ar).strftime("%H:%M")
-                            hoja.update_cell(fila_excel, idx_ini, h)
+                            hoja.update_cell(fila, IDX_INICIO + 1, h)
                             st.rerun()
                     else:
-                        st.caption(f"Inició: {ini}")
-                        if st.button("🏁 Listo", key=f"e_{fila_excel}", type="primary"):
+                        st.caption(f"Inició: {auto['inicio']}")
+                        if st.button("🏁 Listo", key=f"e_{fila}", type="primary"):
                             h = datetime.now(tz_ar).strftime("%H:%M")
-                            hoja.update_cell(fila_excel, idx_fin, h)
-                            st.rerun()
-                st.markdown("<div style='border-bottom:1px solid #f0f0f0; margin-bottom:5px'></div>", unsafe_allow_html=True)
+                            hoja.update_cell(fila, IDX_FIN + 1, h)
+                            st.rerun() # Recarga rapida
+                
+                st.markdown("<div class='fila-tabla'></div>", unsafe_allow_html=True)
 
-        else:
-            st.info("No hay pendientes para la fecha seleccionada.")
-
-        # --- TABLA TERMINADOS ---
-        if not terminados.empty:
-            with st.expander(f"✅ Terminados ({len(terminados)})"):
-                cols_ok = [c for c in [col_prometido, col_patente, col_modelo, col_asesor, col_inicio, col_fin] if c]
-                st.dataframe(terminados[cols_ok], hide_index=True)
+        # --- MOSTRAR TERMINADOS ---
+        if lista_terminados:
+            st.write("---")
+            with st.expander(f"✅ Lavados Terminados ({len(lista_terminados)})"):
+                # Creamos un dataframe simple solo para mostrar
+                df_term = pd.DataFrame(lista_terminados)
+                # Seleccionamos y renombramos columnas para que se vea lindo
+                if not df_term.empty:
+                    df_term = df_term[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]]
+                    st.dataframe(df_term, hide_index=True, use_container_width=True)
 
     except Exception as e:
-        st.error("Error:")
+        st.error("Ocurrió un error:")
         st.write(e)
+        st.info("Revisa si las columnas I y J existen en tu Excel para Inicio y Fin.")
 
 if __name__ == "__main__":
     main()
