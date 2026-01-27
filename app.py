@@ -16,8 +16,7 @@ st.markdown("""
     .hora-grande { font-size: 1.2em; font-weight: bold; color: #d32f2f; }
     .patente { font-size: 1.2em; font-weight: bold; color: #1565c0; text-transform: uppercase; }
     .asesor { font-size: 0.9em; color: #666; font-style: italic; }
-    .modelo { font-weight: 500; color: #333; }
-    .stButton button { width: 100%; }
+    .stButton button { width: 100%; border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -25,7 +24,7 @@ st.markdown("""
 def limpiar_hora(valor):
     if not valor: return ""
     v = str(valor).strip()
-    if len(v) > 5: return v[:5] # Cortar segundos
+    if len(v) > 5: return v[:5]
     return v
 
 def conectar_sheet():
@@ -43,77 +42,98 @@ def main():
         hoja = conectar_sheet()
         raw_data = hoja.get_all_values()
         
-        # --- ÍNDICES DE COLUMNAS (A=0, B=1, C=2...) ---
-        IDX_FECHA = 0      # Columna A
-        IDX_ASESOR = 2     # Columna C
-        IDX_DOMINIO = 3    # Columna D
-        IDX_MODELO = 4     # Columna E
-        IDX_PROMETIDO = 7  # Columna H
-        IDX_INICIO = 8     # Columna I
-        IDX_FIN = 9        # Columna J
+        # --- 1. BUSCADOR DE ENCABEZADOS (EL SABUESO) ---
+        fila_headers = -1
+        # Buscamos la fila que tenga "DOMINIO" y "FECHA"
+        for i, fila in enumerate(raw_data[:10]):
+            fila_upper = [str(c).strip().upper() for c in fila]
+            if "DOMINIO" in fila_upper:
+                fila_headers = i
+                headers = fila_upper # Guardamos los nombres en mayúsculas
+                break
+        
+        if fila_headers == -1:
+            st.error("🚨 Error Crítico: No encuentro la columna 'DOMINIO'.")
+            st.stop()
 
-        # --- FECHA DE HOY ---
+        # --- 2. MAPEO DINÁMICO ---
+        # Buscamos en qué número de columna cayó cada título
+        def get_idx(posibles_nombres):
+            for nombre in posibles_nombres:
+                if nombre in headers:
+                    return headers.index(nombre)
+            return -1
+
+        IDX_FECHA = get_idx(["FECHA", "DIA"])
+        IDX_DOMINIO = get_idx(["DOMINIO", "PATENTE"])
+        IDX_MODELO = get_idx(["MODELO", "VEHICULO"])
+        IDX_ASESOR = get_idx(["ASESOR", "ASESOR DE SERVICIO"])
+        IDX_PROMETIDO = get_idx(["HORARIO PROMETIDO", "HORA PROM", "PROMESA", "HORA"])
+        IDX_INICIO = get_idx(["INICIO", "HORA INICIO"])
+        IDX_FIN = get_idx(["FIN", "HORA FIN", "TERMINADO"])
+
+        # Debug para vos (Te muestra qué encontró)
+        with st.sidebar:
+            st.header("🕵️ Detector de Columnas")
+            st.success(f"Dominio: Columna {IDX_DOMINIO+1}")
+            st.success(f"Horario: Columna {IDX_PROMETIDO+1}")
+            st.info(f"Asesor: Columna {IDX_ASESOR+1}")
+            st.write("---")
+            ver_todo = st.checkbox("Ignorar Fecha (Ver Todo)", value=False)
+
+        # Si alguna columna clave falta, avisamos
+        if IDX_DOMINIO == -1 or IDX_PROMETIDO == -1:
+            st.error("⚠️ Faltan columnas clave (Dominio o Horario Prometido). Revisa los nombres en el Excel.")
+            st.write("Columnas encontradas:", headers)
+            st.stop()
+
+        # --- 3. PROCESAMIENTO ---
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
         ahora = datetime.now(tz_ar)
-        
-        # CORRECCIÓN AQUÍ: Mantenemos como números (int)
         hoy_dia = ahora.day
         hoy_mes = ahora.month
         
-        # Generamos las dos formas de escribir la fecha:
-        texto_busqueda_1 = f"{hoy_dia}/{hoy_mes}"       # Ejemplo: 27/1
-        texto_busqueda_2 = f"{hoy_dia:02d}/{hoy_mes:02d}" # Ejemplo: 27/01
-        
-        # --- BARRA LATERAL (DEBUG) ---
-        with st.sidebar:
-            st.header("🔧 Controles")
-            ver_todo = st.checkbox("⚠️ Ver TODO (Ignorar fecha)", value=False)
-            st.write(f"Buscando autos con fecha: **'{texto_busqueda_1}'** o **'{texto_busqueda_2}'**")
+        # Filtros de texto (27/1 y 27/01)
+        filtro_1 = f"{hoy_dia}/{hoy_mes}"
+        filtro_2 = f"{hoy_dia:02d}/{hoy_mes:02d}"
 
         lista_pendientes = []
         lista_terminados = []
 
-        # --- BARRIDO DE DATOS ---
         for i, fila in enumerate(raw_data):
-            if i < 1: continue # Saltamos títulos
+            if i <= fila_headers: continue # Saltamos títulos
             
-            # Relleno de seguridad por si la fila es corta
-            while len(fila) < 12: fila.append("")
+            # Relleno de seguridad
+            while len(fila) < max(IDX_FIN, IDX_PROMETIDO) + 1: fila.append("")
 
-            # 1. LEER FECHA COMO TEXTO
+            # Chequeo de Fecha
             fecha_celda = str(fila[IDX_FECHA]).strip()
             
-            # 2. FILTRO INTELIGENTE DE TEXTO
             es_de_hoy = False
-            
             if ver_todo:
                 es_de_hoy = True
             else:
-                # Buscamos si la celda contiene "27/1" o "27/01"
-                # Usamos "in" por si la celda dice "27/1/2026" (funciona igual)
-                if texto_busqueda_1 in fecha_celda or texto_busqueda_2 in fecha_celda:
+                # Si contiene 27/1 o 27/01
+                if filtro_1 in fecha_celda or filtro_2 in fecha_celda:
                     es_de_hoy = True
             
             if es_de_hoy:
-                # Capturamos datos
                 dom = str(fila[IDX_DOMINIO]).strip()
-                if not dom: continue # Si no hay dominio, es fila vacía
+                if not dom: continue # Fila vacía
 
                 datos = {
                     "fila": i + 1,
                     "dominio": dom,
-                    "modelo": str(fila[IDX_MODELO]).strip(),
-                    "asesor": str(fila[IDX_ASESOR]).strip(),
+                    "modelo": str(fila[IDX_MODELO]).strip() if IDX_MODELO != -1 else "",
+                    "asesor": str(fila[IDX_ASESOR]).strip() if IDX_ASESOR != -1 else "",
                     "prometido": limpiar_hora(fila[IDX_PROMETIDO]),
-                    "inicio": limpiar_hora(fila[IDX_INICIO]),
-                    "fin": limpiar_hora(fila[IDX_FIN])
+                    "inicio": limpiar_hora(fila[IDX_INICIO]) if IDX_INICIO != -1 else "",
+                    "fin": limpiar_hora(fila[IDX_FIN]) if IDX_FIN != -1 else ""
                 }
 
-                # Clasificar
                 if datos["fin"]:
                     lista_terminados.append(datos)
                 else:
-                    # Orden: Si no tiene hora, "23:59"
                     h = datos["prometido"]
                     if not h: h = "23:59"
                     datos["orden"] = h
@@ -123,10 +143,8 @@ def main():
         st.subheader(f"📋 A Lavar ({len(lista_pendientes)})")
         
         if not lista_pendientes:
-            st.warning(f"No encontré autos que digan '{texto_busqueda_1}' en la primera columna.")
-            st.info("Prueba activando la casilla '⚠️ Ver TODO' en el menú de la izquierda para ver si aparecen.")
+            st.info("No hay vehículos pendientes. (Prueba activar 'Ignorar Fecha' en el menú lateral)")
         else:
-            # Ordenar
             lista_pendientes.sort(key=lambda x: x["orden"])
 
             # Encabezados
@@ -163,10 +181,9 @@ def main():
                 
                 st.markdown("<div class='fila-tabla'></div>", unsafe_allow_html=True)
 
-        # Terminados
         if lista_terminados:
             st.write("---")
-            with st.expander(f"✅ Lavados Terminados ({len(lista_terminados)})"):
+            with st.expander(f"✅ Terminados ({len(lista_terminados)})"):
                 df_t = pd.DataFrame(lista_terminados)
                 if not df_t.empty:
                     st.dataframe(df_t[["prometido", "dominio", "modelo", "asesor", "inicio", "fin"]], hide_index=True)
