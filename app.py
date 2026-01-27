@@ -4,7 +4,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import json
-import pytz # Librería para zonas horarias
+import pytz 
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Lavadero", layout="wide")
@@ -16,7 +16,6 @@ def conectar_sheet():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
     client = gspread.authorize(creds)
     
-    # TU PLANILLA
     url = "https://docs.google.com/spreadsheets/d/1zw3qrKmdK_gmGL8k_nDyC2ugWb_hMINDxNvqzE2Japo/edit"
     return client.open_by_url(url).sheet1
 
@@ -28,53 +27,51 @@ def main():
         hoja = conectar_sheet()
         data = hoja.get_all_values()
         
-        # --- NOMBRES DE COLUMNAS (AJUSTADOS A TU FOTO) ---
-        # Fila 1 del Excel parece ser la de títulos (según tu foto es la fila 1, no la 3)
-        # Si tus títulos "FECHA, HORA, DOMINIO..." están en la Fila 1, usa FILA_TITULOS = 0
+        # FILA 0 = La primera fila del Excel (donde están los títulos)
         FILA_TITULOS = 0 
         
         headers = data[FILA_TITULOS] 
         df = pd.DataFrame(data[FILA_TITULOS+1:], columns=headers)
         
-        # AJUSTA ESTOS NOMBRES SI NO TE APARECEN DATOS:
+        # --- AQUÍ ESTABA EL ERROR: CORREGIMOS LOS NOMBRES EXACTOS ---
+        # (Tal cual se ven en tus fotos)
         COL_PATENTE = "DOMINIO"
-        COL_MODELO = "Modelo"       # En tu foto se ve "Modelo" (con M mayúscula y el resto minúscula)
-        COL_PROMETIDO = "HORA PROM" # Verifica que esta columna exista a la derecha
-        COL_INICIO = "INICIO LAV"   # Verifica que esta columna exista
-        COL_FIN = "FIN LAVADO"      # Verifica que esta columna exista
+        COL_MODELO = "Modelo"            # En tu foto está con 'M' mayúscula y resto minúscula
+        COL_PROMETIDO = "Horario Prometido" # Columna H (Fondo verde)
+        COL_INICIO = "INICIO"            # Columna I (Fondo blanco)
+        COL_FIN = "FIN"                  # Columna J (Fondo blanco)
         
-        # --- FILTRO DE FECHA INTELIGENTE ---
-        # 1. Obtenemos la fecha actual en Argentina
+        # --- FILTRO DE FECHA ---
         tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
         hoy = datetime.now(tz_ar).date()
         
-        # 2. Convertimos la columna FECHA del Excel (Columna A) a objetos de fecha reales
-        # Esto soluciona el problema de "27/1" vs "27/01"
-        col_fecha_nombre = df.columns[0] # Asumimos que FECHA es la primera columna
+        col_fecha_nombre = df.columns[0] # Asumimos columna A (FECHA)
+        
+        # Normalizamos la fecha para que "27/1" sea igual a "27/01"
         df['Fecha_Normalizada'] = pd.to_datetime(df[col_fecha_nombre], dayfirst=True, errors='coerce').dt.date
 
-        # 3. Filtramos
         df_hoy = df[df['Fecha_Normalizada'] == hoy].copy()
 
         if df_hoy.empty:
-            st.warning(f"No encontré autos para la fecha: {hoy}")
-            st.info("Consejo: Revisa que la columna A tenga la fecha correcta.")
+            st.warning(f"No encontré autos para la fecha de hoy: {hoy}")
+            st.info("Revisa que la columna 'FECHA' tenga el día correcto (ej: 27/1/2026).")
         else:
-            # Ordenar si existe la columna
+            # Ordenar por Horario Prometido si existe
             if COL_PROMETIDO in df_hoy.columns:
                 df_hoy = df_hoy.sort_values(by=COL_PROMETIDO)
 
-            st.success(f"📅 Mostrando turnos del: **{hoy}**")
+            st.success(f"📅 Turnos del día: **{hoy}**")
             
             for i, row in df_hoy.iterrows():
-                # Índices para escribir en el Excel
                 try:
+                    # Buscamos en qué número de columna están los títulos (para escribir)
                     idx_inicio = headers.index(COL_INICIO) + 1
                     idx_fin = headers.index(COL_FIN) + 1
-                    # Calculamos fila real: índice del loop + filas headers + corrección base 1
+                    
+                    # Calculamos la fila real (+1 por empezar en 0, +1 por header)
                     fila_real = i + FILA_TITULOS + 2 
                 except:
-                    st.error(f"⚠️ Error: No encuentro las columnas '{COL_INICIO}' o '{COL_FIN}' en el Excel. ¿Están escritas igual?")
+                    st.error(f"⚠️ Error Crítico: No encuentro las columnas '{COL_INICIO}' o '{COL_FIN}' en la fila 1 del Excel.")
                     st.stop()
 
                 patente = row.get(COL_PATENTE, "S/D")
@@ -83,23 +80,32 @@ def main():
                 inicio = row.get(COL_INICIO, "")
                 fin = row.get(COL_FIN, "")
 
-                # LÓGICA DE ESTADO VISUAL
+                # LÓGICA VISUAL (EMOJIS Y COLORES)
                 estado_emoji = "⏳"
                 estado_color = "grey"
+                bg_color = "#f9f9f9" # Gris clarito por defecto
                 
                 if inicio and not fin:
                     estado_emoji = "💦 LAVANDO"
-                    estado_color = "blue"
+                    estado_color = "#0068c9" # Azul
+                    bg_color = "#e6f2ff" # Fondo azulado
                 elif fin:
                     estado_emoji = "✅ LISTO"
-                    estado_color = "green"
+                    estado_color = "#2e7d32" # Verde
+                    bg_color = "#e8f5e9" # Fondo verdoso
 
                 # TARJETA
                 with st.container():
                     st.markdown(f"""
-                    <div style="padding:10px; border-radius:10px; border:1px solid #ddd; margin-bottom:10px; background-color:#f9f9f9">
-                        <h3 style="margin:0; color:{estado_color}">{estado_emoji} {patente}</h3>
-                        <p style="margin:0"><b>{modelo}</b> | Prometido: <span style="color:red">{prometido}</span></p>
+                    <div style="padding:15px; border-radius:10px; border:1px solid #ddd; margin-bottom:15px; background-color:{bg_color}">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h2 style="margin:0; color:{estado_color}; font-weight:bold;">{patente}</h2>
+                            <span style="font-size:1.2em; background-color:white; padding:5px 10px; border-radius:5px; border:1px solid #ccc">
+                                ⏰ {prometido}
+                            </span>
+                        </div>
+                        <p style="margin:5px 0 0 0; font-size:1.1em;">🚘 {modelo}</p>
+                        <p style="margin:0; color:grey; font-size:0.9em;">Estado: {estado_emoji}</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -108,7 +114,7 @@ def main():
                     # Botón INICIAR
                     with c1:
                         if not inicio:
-                            if st.button(f"▶️ INICIAR {patente}", key=f"ini_{i}"):
+                            if st.button(f"▶️ INICIAR", key=f"ini_{i}", use_container_width=True):
                                 hora = datetime.now(tz_ar).strftime("%H:%M")
                                 hoja.update_cell(fila_real, idx_inicio, hora)
                                 st.rerun()
@@ -116,7 +122,7 @@ def main():
                     # Botón TERMINAR
                     with c2:
                         if inicio and not fin:
-                            if st.button(f"🏁 TERMINAR {patente}", key=f"fin_{i}"):
+                            if st.button(f"🏁 TERMINAR", key=f"fin_{i}", type="primary", use_container_width=True):
                                 hora = datetime.now(tz_ar).strftime("%H:%M")
                                 hoja.update_cell(fila_real, idx_fin, hora)
                                 st.balloons()
