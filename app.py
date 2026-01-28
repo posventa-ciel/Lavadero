@@ -116,13 +116,15 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "" and not estado) or (fila[IDX_FIN2].strip() != "")
+        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
-        es_atrasado = False
+        # Filtro de Atrasados real: solo si tiene un proceso ya empezado en el lavadero
+        es_atrasado_critico = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
-            if f_dt < fecha_sel: es_atrasado = True
+            if f_dt < fecha_sel and estado in ["LAVANDO", "PAUSA", "REPASO"]:
+                es_atrasado_critico = True
         except: pass
 
         minutos_lavado = calcular_minutos_totales(fila[IDX_INI1], fila[IDX_FIN1], fila[IDX_INI2], fila[IDX_FIN2])
@@ -131,19 +133,21 @@ def main():
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-            "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
+            "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": (not es_de_fecha),
             "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "tiempo": minutos_lavado, "fecha_dt": f_celda.split()[0]
         }
 
-        # --- CLASIFICACIÓN CORREGIDA PARA QUE NO DESAPAREZCAN ---
-        if estado == "FINALIZADO":
-            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date):
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
+        if es_finalizado:
+            # En terminados: los de hoy o los que terminaste hoy aunque fueran viejos
+            if es_de_fecha or (item["atr"] and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            # Sigue en pendientes si es de hoy, si está atrasado, o si tiene un proceso activo (Pausa/Repaso)
-            if es_de_fecha or es_atrasado or estado in ["PAUSA", "REPASO", "LAVANDO"]:
+            # En pendientes: SOLO los de la fecha seleccionada O los que ya están en proceso (Pausa/Repaso)
+            if es_de_fecha or es_atrasado_critico:
                 pendientes.append(item)
 
+        # Historial
         try:
             meses_nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
             f_dt_obj = datetime.strptime(item["fecha_dt"], "%d/%m/%Y")
@@ -160,7 +164,7 @@ def main():
         h_col[0].caption("PROMETIDO"); h_col[1].caption("DOMINIO"); h_col[2].caption("MODELO"); h_col[3].caption("ASESOR"); h_col[4].caption("ACCIONES")
         
         if pendientes:
-            pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
+            pendientes.sort(key=lambda x: (x["atr"], x["min_orden"]))
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_tit)
@@ -170,12 +174,10 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        # 1. BOTÓN INICIAR
-                        if not p['ini'] or p['est'] == "":
+                        if p['est'] in ["", "PENDIENTE"] or not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        # 2. BOTONES PAUSA / FIN (LAVADO)
                         elif p['est'] == "LAVANDO":
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -184,12 +186,10 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                        # 3. BOTÓN REANUDAR (Desde Pausa)
                         elif p['est'] == "PAUSA":
                             if st.button("🔄 REANUDAR", key=f"r{p['fila']}", use_container_width=True):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                        # 4. BOTÓN FINALIZAR (Desde Repaso)
                         elif p['est'] == "REPASO":
                             if st.button("🏁 FINALIZAR", key=f"f2{p['fila']}", type="primary", use_container_width=True):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
@@ -220,13 +220,11 @@ def main():
             df = pd.DataFrame(terminados_hoy)
             m1, m2, m3 = st.columns(3)
             m1.metric("Lavados Hoy", len(df)); m2.metric("Promedio (min)", f"{int(df['tiempo'].mean())}"); m3.metric("Calidad OK", len(df[df['ok']]))
-            st.plotly_chart(px.bar(df['ase'].value_counts(), title="Lavados por Asesor"), use_container_width=True)
 
     with tab3:
         if historico_mes:
             df_m = pd.DataFrame(historico_mes)
             resumen = df_m.groupby('fecha_dt').agg(Cantidad=('dom', 'count'), Promedio=('tiempo', 'mean')).reset_index()
             st.dataframe(resumen, use_container_width=True)
-            st.plotly_chart(px.line(resumen, x='fecha_dt', y='Cantidad', markers=True), use_container_width=True)
 
 if __name__ == "__main__": main()
