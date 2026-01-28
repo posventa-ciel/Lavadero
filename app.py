@@ -174,27 +174,38 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        if not p['ini']:
-                            if st.button("▶️", key=f"s{p['fila']}", type="primary"):
-                                hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
-                                hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        elif p['ini'] and not p['fin']:
-                            cb = st.columns(2)
-                            if cb[0].button("⏸️", key=f"p{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
-                                hoja.update_cell(p['fila'], IDX_EST + 1, "PAUSA"); st.rerun()
-                            if cb[1].button("🏁", key=f"f{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
-                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                        elif p['est'] == "PAUSA":
-                            if st.button("🔄", key=f"r{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
-                                hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                        elif p['est'] == "REPASO":
-                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
-                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
-                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+    # CASO 1: No empezó (Sin hora de inicio)
+    if not p['ini']:
+        if st.button("▶️", key=f"start_{p['fila']}", type="primary", help="Iniciar Lavado"):
+            hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
+            hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO")
+            st.rerun()
+
+    # CASO 2: Está lavando (Tiene inicio pero no fin de la primera etapa)
+    elif p['ini'] and not p['fin']:
+        col_btns = st.columns(2)
+        if col_btns[0].button("⏸️", key=f"pause_{p['fila']}", help="Pausar"):
+            hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+            hoja.update_cell(p['fila'], IDX_EST + 1, "PAUSA")
+            st.rerun()
+        if col_btns[1].button("🏁", key=f"stop_{p['fila']}", help="Finalizar"):
+            hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+            hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
+            st.rerun()
+
+    # CASO 3: Está en Pausa (Tiene fin1 pero no inicio de repaso)
+    elif p['est'] == "PAUSA":
+        if st.button("🔄", key=f"resume_{p['fila']}", help="Reanudar Lavado"):
+            hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
+            hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO")
+            st.rerun()
+
+    # CASO 4: Está en Repaso/Reanudado (Tiene ini2 pero no fin2)
+    elif p['est'] == "REPASO":
+        if st.button("🏁", key=f"finish_final_{p['fila']}", help="Finalizar Definitivamente"):
+            hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
+            hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
+            st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
         # --- SECCIÓN FINALIZADOS ---
