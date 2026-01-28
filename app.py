@@ -10,7 +10,7 @@ import plotly.express as px
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (ULTRA COMPACTO RECUPERADO) ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem !important; padding-bottom: 1rem !important; }
@@ -21,21 +21,16 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    
-    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
-    
-    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
-
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -55,16 +50,10 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def calcular_minutos(h1, h2):
-    try:
-        fmt = "%H:%M"
-        return int((datetime.strptime(h2, fmt) - datetime.strptime(h1, fmt)).total_seconds() / 60)
-    except: return 0
-
 def obtener_minutos_orden(hora_str):
-    if not hora_str or ":" not in hora_str: return 99999
+    if not hora_str or ":" not in str(hora_str): return 99999
     try:
-        h, m = map(int, hora_str.split(':'))
+        h, m = map(int, str(hora_str).split(':'))
         return h * 60 + m
     except: return 99999
 
@@ -74,9 +63,9 @@ def limpiar_asesor(nombre):
     return partes[1] if len(partes) > 1 and partes[0].isdigit() else partes[0]
 
 def generar_badge_alerta(hora_prometida, now_dt):
-    if not hora_prometida or ":" not in hora_prometida: return f"<span class='badge-normal'>{hora_prometida}</span>"
+    if not hora_prometida or ":" not in str(hora_prometida): return f"<span class='badge-normal'>{hora_prometida}</span>"
     try:
-        h, m = map(int, hora_prometida.split(':'))
+        h, m = map(int, str(hora_prometida).split(':'))
         prometida_dt = now_dt.replace(hour=h, minute=m, second=0, microsecond=0)
         diff = (prometida_dt - now_dt).total_seconds() / 60
         if diff < 0: return f"<div class='badge badge-red'>{hora_prometida}<br>DEMORADO</div>"
@@ -92,8 +81,6 @@ def main():
     hora_actual = now_dt.strftime("%H:%M")
     hoy_date = now_dt.date()
 
-    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
-
     hoja = conectar_sheet()
     if not hoja: return
     raw_data = hoja.get_all_values()
@@ -108,6 +95,8 @@ def main():
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
+    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
+
     pendientes, terminados_hoy = [], []
 
     for i, fila in enumerate(raw_data[1:], start=2):
@@ -115,26 +104,22 @@ def main():
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
         
-        # FILTRO EXCLUSIÓN: No vino, No se lava, etc.
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
-        
-        # FILTRO BÚSQUEDA
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1] and not estado) or fila[IDX_FIN2]
         
-        # Detectar si es de hoy (o de la fecha seleccionada)
-        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
-        
-        # Detectar atraso (fecha anterior a la seleccionada)
+        # Un auto está finalizado si el estado es FINALIZADO o tiene marcas de fin
+        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
+        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
+
+        # Detectar si es un auto de días anteriores
         es_atrasado = False
-        if not es_finalizado:
-            try:
-                f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
-                if f_dt < fecha_sel: es_atrasado = True
-            except: pass
+        try:
+            f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
+            if f_dt < fecha_sel: es_atrasado = True
+        except: pass
 
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -145,17 +130,18 @@ def main():
         }
 
         if es_finalizado:
-            if es_de_fecha: terminados_hoy.append(item)
+            # LÓGICA DE RECUPERACIÓN: Si estoy en la vista de hoy, incluyo los de hoy Y los atrasados ya terminados
+            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date):
+                terminados_hoy.append(item)
         else:
-            if es_de_fecha or es_atrasado: pendientes.append(item)
+            if es_de_fecha_seleccionada or es_atrasado:
+                pendientes.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
 
     with tab1:
-        # --- SECCIÓN PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
-            # ORDEN: Primero los atrasados, luego por horario prometido
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             cols_p = [0.8, 0.8, 2, 0.8, 1.4]
             for p in pendientes:
@@ -167,13 +153,12 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        # --- ESTADO: INICIAL (Botón Play) ---
+                        # Botón INICIAR
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        
-                        # --- ESTADO: EN LAVADO (Botones Pausa o Fin) ---
+                        # Botones PAUSA / FIN
                         elif p['ini'] and not p['fin']:
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -182,22 +167,19 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                        
-                        # --- ESTADO: PAUSA (Botón Repaso/Reanudar) ---
+                        # Botón REANUDAR (REPASO)
                         elif p['est'] == "PAUSA":
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                        
-                        # --- ESTADO: REPASO (Botón Finalizar Segundo Tiempo) ---
+                        # Botón FINALIZAR REPASO
                         elif p['est'] == "REPASO":
                             if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # --- SECCIÓN FINALIZADOS ---
+        st.markdown("<br>")
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
