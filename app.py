@@ -9,83 +9,53 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS "VISUAL FIX" ---
+# --- ESTILOS "ULTRA COMPACTOS" ---
 st.markdown("""
 <style>
-    /* 1. CORRECCIÓN DE ALTURA: Bajamos un poco para que no lo tape la barra de Streamlit */
+    /* 1. AJUSTE DE MARGENES GLOBALES */
     .block-container {
-        padding-top: 3rem !important; /* Antes estaba en 0.5rem y se tapaba */
+        padding-top: 1.5rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* 2. HEADER: Diseño limpio y visible */
+    /* 2. HEADER */
     .header-div {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #00235d;
-        margin-bottom: 10px;
+        display: flex; align-items: center; gap: 15px;
+        padding-bottom: 10px; border-bottom: 2px solid #00235d; margin-bottom: 5px;
     }
-    .main-title { 
-        font-size: 20px !important; 
-        font-weight: bold; 
-        color: #00235d; 
-        margin: 0 !important; 
-        line-height: 1.2;
-    }
-    .sub-title { 
-        font-size: 13px; 
-        color: #666; 
-        margin: 0 !important; 
+    .main-title { font-size: 22px; font-weight: bold; color: #00235d; margin: 0; line-height: 1; }
+    
+    /* 3. REDUCCION AGRESIVA DE ESPACIOS ENTRE FILAS */
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.1rem !important; /* Quita el espacio entre elementos verticales */
     }
     
-    /* 3. ELIMINAR ESPACIO SOBRANTE EN TEXTOS */
-    /* Esto quita el margen automático de los párrafos que separaba las filas */
-    p {
-        margin-bottom: 0px !important;
-    }
-    
-    /* 4. FILAS COMPACTAS */
     .row-container { 
-        padding: 4px 0 !important; 
-        border-bottom: 1px solid #eee; 
+        padding: 2px 0 !important; 
+        border-bottom: 1px solid #ddd; 
         align-items: center; 
-        min-height: 32px !important;
+        height: 34px !important; /* Altura fija por fila */
     }
     
-    /* 5. BOTONES ALINEADOS */
+    /* 4. BOTONES SLIM */
     .stButton button { 
-        width: 100%; 
-        border-radius: 4px; 
-        font-weight: 600; 
-        font-size: 12px !important;
-        height: 28px !important;
-        padding: 0px !important;
-        line-height: 1 !important;
-        margin-top: 2px !important; /* Pequeño ajuste para centrar con el texto */
+        height: 28px !important; 
+        font-size: 11px !important; 
+        padding: 0px 5px !important; 
+        margin-top: 2px !important;
     }
-
-    /* Estilos de Texto */
+    
+    /* 5. TEXTOS */
+    p { margin-bottom: 0px !important; }
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
     .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #333; font-size: 13px; font-weight: 500; }
-    .txt-asesor { color: #666; font-size: 12px; font-style: italic; }
+    .txt-modelo { color: #222; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-asesor { color: #555; font-size: 11px; }
 
-    /* KPI Cards */
-    .kpi-card { 
-        background-color: white; 
-        border: 1px solid #ddd; 
-        border-radius: 6px; 
-        padding: 5px; 
-        text-align: center; 
-    }
-    .kpi-val { font-size: 18px; font-weight: bold; color: #003366; }
-    .kpi-lbl { font-size: 10px; color: #666; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN GOOGLE SHEETS ---
+# --- CONEXIÓN ---
 def conectar_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -131,14 +101,12 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER MANUAL ---
+    # --- HEADER CON GIF DE LAVADERO ---
+    # Usamos un GIF generico de lavadero que suele funcionar
     st.markdown("""
     <div class="header-div">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="40">
-        <div>
-            <div class="main-title">CONTROL LAVADERO</div>
-            <div class="sub-title">Gestión Postventa</div>
-        </div>
+        <img src="https://media.tenor.com/images/a444a821739c639691b0b5711c750a10/tenor.gif" width="50" style="border-radius: 5px;">
+        <p class="main-title">GESTIÓN DE LAVADERO</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -164,24 +132,27 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
+    # --- SIDEBAR ---
     with st.sidebar:
-        st.markdown("**Filtros**")
+        st.markdown("**Configuración**")
         fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
+    # --- PROCESAMIENTO DE DATOS ---
     pendientes = []
-    terminados = []
+    terminados_hoy = []
     tiempos_dia = []
+    
+    # Para Historial (Recopilar datos de todas las fechas)
+    historial_data = []
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         
         dom = fila[IDX_DOMINIO]
         pro_raw = fila[IDX_PROMETIDO].upper()
-        
-        if not dom: continue
-        if "NO SE LAVA" in pro_raw or "NO VINO" in pro_raw: continue
+        if not dom or "NO SE LAVA" in pro_raw or "NO VINO" in pro_raw: continue
 
         fecha_celda = fila[IDX_FECHA]
         ini1, fin1 = fila[IDX_INICIO], fila[IDX_FIN]
@@ -190,8 +161,11 @@ def main():
         control_ok = fila[IDX_CONTROL].strip().upper()
 
         es_finalizado = (estado == "FINALIZADO") or (fin1 and not estado) or fin2
-        es_hoy = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
         
+        # --- Lógica Operativa (Hoy) ---
+        es_hoy_filtro = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
+        
+        # Chequeo atrasados para la lista operativa
         es_atrasado = False
         if not es_finalizado:
             try:
@@ -199,33 +173,44 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
-        if es_hoy or es_atrasado:
+        if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
                 "dom": dom, "mod": fila[IDX_MODELO],
                 "ase": limpiar_asesor(fila[IDX_ASESOR]),
                 "pro": fila[IDX_PROMETIDO],
-                "ini": ini1, "fin": fin1,
-                "ini2": ini2, "fin2": fin2,
-                "est": estado, "atr": es_atrasado,
-                "ok": (control_ok == "OK"),
+                "ini": ini1, "fin": fin1, "ini2": ini2, "fin2": fin2,
+                "est": estado, "atr": es_atrasado, "ok": (control_ok == "OK"),
                 "orden_pend": normalizar_hora(fila[IDX_PROMETIDO]),
                 "orden_term": obtener_minutos_orden(ini1)
             }
-
             if es_finalizado:
-                terminados.append(item)
-                if es_hoy:
+                terminados_hoy.append(item)
+                if es_hoy_filtro:
                     t = calcular_minutos(ini1, fin1)
                     if ini2 and fin2: t += calcular_minutos(ini2, fin2)
                     if t > 0: tiempos_dia.append(t)
             else:
                 pendientes.append(item)
 
-    tab_op, tab_kpi = st.tabs(["🚗 Operación", "📈 KPIs"])
+        # --- Lógica Histórica (Todo) ---
+        if es_finalizado:
+            # Intentar parsear fecha para agrupar
+            try:
+                # Extraer solo la fecha (dd/mm/yyyy)
+                fecha_clean = fecha_celda.split()[0]
+                t_total = calcular_minutos(ini1, fin1)
+                if ini2 and fin2: t_total += calcular_minutos(ini2, fin2)
+                
+                if t_total > 0 and t_total < 300: # Filtramos errores de fechas locas (>5 horas)
+                    historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
+            except: pass
+
+    # --- PESTAÑAS ---
+    tab_op, tab_kpi, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
 
     with tab_op:
-        # --- PENDIENTES ---
+        # PENDIENTES
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
@@ -240,7 +225,6 @@ def main():
             for p in pendientes:
                 with st.container():
                     col = st.columns([0.6, 0.8, 2.5, 0.8, 1.3])
-                    
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
@@ -249,7 +233,7 @@ def main():
                     
                     with col[4]:
                         if not p['ini']:
-                            if st.button("▶️ INICIO", key=f"g{p['fila']}", type="primary"):
+                            if st.button("▶️", key=f"g{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INICIO + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "LAVANDO")
                                 st.rerun()
@@ -264,12 +248,12 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
                         elif p['est'] == "PAUSA" and not p['ini2']:
-                            if st.button("🔄 RETOMAR", key=f"r{p['fila']}"):
+                            if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "REPASO")
                                 st.rerun()
                         elif p['ini2'] and not p['fin2']:
-                            if st.button("🏁 FIN", key=f"f2{p['fila']}"):
+                            if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
@@ -279,11 +263,10 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- FINALIZADOS ---
-        st.markdown(f"**Finalizados ({len(terminados)})**")
-        if terminados:
-            terminados.sort(key=lambda x: x["orden_term"])
-            
+        # TERMINADOS
+        st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
+        if terminados_hoy:
+            terminados_hoy.sort(key=lambda x: x["orden_term"])
             c_t = st.columns([0.6, 0.6, 0.8, 2.5, 0.8, 0.5])
             c_t[0].caption("INI")
             c_t[1].caption("FIN")
@@ -292,7 +275,7 @@ def main():
             c_t[4].caption("ASE")
             c_t[5].caption("OK")
             
-            for t in terminados:
+            for t in terminados_hoy:
                 r = st.columns([0.6, 0.6, 0.8, 2.5, 0.8, 0.5])
                 fin_s = t['fin2'] if t['fin2'] else t['fin']
                 
@@ -301,22 +284,43 @@ def main():
                 r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
                 r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
                 r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
-                
                 with r[5]:
                     nuevo_ok = st.checkbox("OK", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
                     if nuevo_ok != t['ok']:
                         valor_sheet = "OK" if nuevo_ok else ""
                         hoja.update_cell(t['fila'], IDX_CONTROL + 1, valor_sheet)
                         st.rerun()
-                
                 st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
 
     with tab_kpi:
+        st.markdown("##### Estadísticas de Hoy")
         k1, k2, k3 = st.columns(3)
         avg = int(sum(tiempos_dia)/len(tiempos_dia)) if tiempos_dia else 0
-        with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{len(terminados)}</div><div class='kpi-lbl'>Total</div></div>", unsafe_allow_html=True)
-        with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{avg}'</div><div class='kpi-lbl'>Promedio</div></div>", unsafe_allow_html=True)
-        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{max(tiempos_dia) if tiempos_dia else 0}'</div><div class='kpi-lbl'>Máx</div></div>", unsafe_allow_html=True)
+        with k1: st.metric("Lavados", len(terminados_hoy))
+        with k2: st.metric("Promedio", f"{avg} min")
+        with k3: st.metric("Máximo", f"{max(tiempos_dia) if tiempos_dia else 0} min")
+
+    with tab_hist:
+        if historial_data:
+            df_hist = pd.DataFrame(historial_data)
+            
+            # Convertir 'Fecha' a datetime para ordenar correctamente
+            df_hist['Fecha_DT'] = pd.to_datetime(df_hist['Fecha'], format="%d/%m/%Y", errors='coerce')
+            df_hist = df_hist.dropna(subset=['Fecha_DT']).sort_values('Fecha_DT')
+
+            # 1. GRÁFICO DE BARRAS (Cantidad por día)
+            st.markdown("#### 📅 Autos Lavados por Día")
+            df_counts = df_hist.groupby("Fecha", sort=False)["Auto"].sum().reset_index()
+            st.bar_chart(df_counts.set_index("Fecha"))
+            
+            st.divider()
+
+            # 2. GRÁFICO DE LÍNEA (Tiempo promedio)
+            st.markdown("#### ⏱️ Tiempo Promedio por Día (min)")
+            df_avg = df_hist.groupby("Fecha", sort=False)["Tiempo"].mean().reset_index()
+            st.line_chart(df_avg.set_index("Fecha"))
+        else:
+            st.info("No hay datos históricos suficientes aún.")
 
 if __name__ == "__main__":
     main()
