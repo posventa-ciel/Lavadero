@@ -10,7 +10,7 @@ import plotly.express as px
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS CSS (MODO COMPACTO - APROBADO) ---
+# --- ESTILOS CSS (MODO COMPACTO) ---
 st.markdown("""
 <style>
     /* 1. Ajuste del techo */
@@ -19,10 +19,10 @@ st.markdown("""
         padding-bottom: 2rem !important;
     }
     
-    /* 2. Encabezado Azul (Estilo Autociel) */
+    /* 2. Encabezado Azul (Estilo Autociel SIN LOGO) */
     .header-box {
         background: linear-gradient(90deg, #00235d 0%, #001538 100%);
-        padding: 10px 20px;
+        padding: 15px 20px;
         border-radius: 6px;
         color: white;
         display: flex;
@@ -118,16 +118,12 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- ENCABEZADO CORREGIDO ---
-    # Nota: Agregué background: white al logo para asegurar contraste
+    # --- ENCABEZADO SIN LOGO Y CON TÍTULO NUEVO ---
     st.markdown(f"""
     <div class="header-box">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="45" style="background: white; border-radius: 50%; padding: 2px;" alt="PEUGEOT">
-            <div style="line-height: 1.1;">
-                <div style="font-size: 20px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;">PROGRAMACIÓN DEL LAVADERO</div>
-                <div style="font-size: 12px; opacity: 0.8;">GESTIÓN OPERATIVA POSTVENTA</div>
-            </div>
+        <div style="line-height: 1.1;">
+            <div style="font-size: 20px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;">PROGRAMACIÓN DEL LAVADERO</div>
+            <div style="font-size: 12px; opacity: 0.8;">GESTIÓN OPERATIVA POSTVENTA</div>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 16px; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
