@@ -9,48 +9,61 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS "ULTRA COMPACTOS" ---
+# --- ESTILOS VISUALES ---
 st.markdown("""
 <style>
-    /* 1. AJUSTE DE MARGENES GLOBALES */
+    /* 1. AJUSTE DE MARGEN SUPERIOR (Para que se vea el título) */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 3.5rem !important; /* Espacio suficiente para que no lo tape la barra */
         padding-bottom: 1rem !important;
     }
     
-    /* 2. HEADER */
+    /* 2. HEADER CLARO Y VISIBLE */
     .header-div {
-        display: flex; align-items: center; gap: 15px;
-        padding-bottom: 10px; border-bottom: 2px solid #00235d; margin-bottom: 5px;
+        display: flex; 
+        align-items: center; 
+        gap: 15px;
+        padding-bottom: 15px; 
+        border-bottom: 2px solid #00235d; 
+        margin-bottom: 15px;
     }
-    .main-title { font-size: 22px; font-weight: bold; color: #00235d; margin: 0; line-height: 1; }
-    
-    /* 3. REDUCCION AGRESIVA DE ESPACIOS ENTRE FILAS */
-    div[data-testid="stVerticalBlock"] > div {
-        gap: 0.1rem !important; /* Quita el espacio entre elementos verticales */
+    .main-title { 
+        font-size: 28px !important; 
+        font-weight: bold; 
+        color: #00235d; 
+        margin: 0 !important; 
+        line-height: 1.1; 
+    }
+    .sub-title {
+        font-size: 14px;
+        color: #666;
+        margin: 0 !important;
     }
     
+    /* 3. FILAS COMPACTAS (Pero legibles) */
     .row-container { 
-        padding: 2px 0 !important; 
+        padding: 3px 0 !important; 
         border-bottom: 1px solid #ddd; 
         align-items: center; 
-        height: 34px !important; /* Altura fija por fila */
+        height: 36px !important;
     }
     
-    /* 4. BOTONES SLIM */
+    /* 4. BOTONES AJUSTADOS */
     .stButton button { 
         height: 28px !important; 
-        font-size: 11px !important; 
+        font-size: 12px !important; 
         padding: 0px 5px !important; 
         margin-top: 2px !important;
     }
     
-    /* 5. TEXTOS */
+    /* 5. ELIMINAR ESPACIOS INNECESARIOS */
     p { margin-bottom: 0px !important; }
+    
+    /* Estilos de texto */
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
     .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #222; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .txt-asesor { color: #555; font-size: 11px; }
+    .txt-modelo { color: #222; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-asesor { color: #555; font-size: 12px; }
 
 </style>
 """, unsafe_allow_html=True)
@@ -101,12 +114,14 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER CON GIF DE LAVADERO ---
-    # Usamos un GIF generico de lavadero que suele funcionar
+    # --- HEADER RESTAURADO ---
     st.markdown("""
     <div class="header-div">
-        <img src="https://media.tenor.com/images/a444a821739c639691b0b5711c750a10/tenor.gif" width="50" style="border-radius: 5px;">
-        <p class="main-title">GESTIÓN DE LAVADERO</p>
+        <img src="https://media.tenor.com/images/a444a821739c639691b0b5711c750a10/tenor.gif" width="60" style="border-radius: 8px;">
+        <div>
+            <div class="main-title">CONTROL DE LAVADERO</div>
+            <div class="sub-title">Gestión de Tiempos y Calidad</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -132,20 +147,16 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- SIDEBAR ---
     with st.sidebar:
-        st.markdown("**Configuración**")
-        fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
+        st.header("Filtros")
+        fecha_sel = st.date_input("Fecha:", hoy_date)
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
-    # --- PROCESAMIENTO DE DATOS ---
     pendientes = []
     terminados_hoy = []
-    tiempos_dia = []
-    
-    # Para Historial (Recopilar datos de todas las fechas)
-    historial_data = []
+    tiempos_hoy = [] # Lista de tiempos SOLO de hoy
+    historial_data = [] # Lista de TODO el historial
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
@@ -162,10 +173,9 @@ def main():
 
         es_finalizado = (estado == "FINALIZADO") or (fin1 and not estado) or fin2
         
-        # --- Lógica Operativa (Hoy) ---
+        # Filtro de HOY
         es_hoy_filtro = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
         
-        # Chequeo atrasados para la lista operativa
         es_atrasado = False
         if not es_finalizado:
             try:
@@ -173,6 +183,7 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
+        # 1. ARMADO DE LISTAS OPERATIVAS (HOY + PENDIENTES)
         if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
@@ -186,28 +197,29 @@ def main():
             }
             if es_finalizado:
                 terminados_hoy.append(item)
+                # Calcular tiempo solo si es de hoy para el grafico de hoy
                 if es_hoy_filtro:
                     t = calcular_minutos(ini1, fin1)
                     if ini2 and fin2: t += calcular_minutos(ini2, fin2)
-                    if t > 0: tiempos_dia.append(t)
+                    if t > 0: tiempos_hoy.append(t)
             else:
                 pendientes.append(item)
 
-        # --- Lógica Histórica (Todo) ---
+        # 2. ARMADO DE HISTORIAL (TODO)
         if es_finalizado:
-            # Intentar parsear fecha para agrupar
             try:
-                # Extraer solo la fecha (dd/mm/yyyy)
-                fecha_clean = fecha_celda.split()[0]
+                # Normalizamos la fecha para agrupar
+                fecha_clean = fecha_celda.split()[0] # Toma lo que está antes del espacio si hay hora
                 t_total = calcular_minutos(ini1, fin1)
                 if ini2 and fin2: t_total += calcular_minutos(ini2, fin2)
                 
-                if t_total > 0 and t_total < 300: # Filtramos errores de fechas locas (>5 horas)
+                # Guardamos si el tiempo es lógico (menos de 300 min)
+                if t_total > 0 and t_total < 300: 
                     historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
             except: pass
 
     # --- PESTAÑAS ---
-    tab_op, tab_kpi, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
+    tab_op, tab_hoy, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
 
     with tab_op:
         # PENDIENTES
@@ -263,7 +275,7 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # TERMINADOS
+        # FINALIZADOS
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
@@ -292,35 +304,42 @@ def main():
                         st.rerun()
                 st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
 
-    with tab_kpi:
-        st.markdown("##### Estadísticas de Hoy")
+    with tab_hoy:
+        st.markdown("##### Rendimiento de Hoy")
         k1, k2, k3 = st.columns(3)
-        avg = int(sum(tiempos_dia)/len(tiempos_dia)) if tiempos_dia else 0
-        with k1: st.metric("Lavados", len(terminados_hoy))
-        with k2: st.metric("Promedio", f"{avg} min")
-        with k3: st.metric("Máximo", f"{max(tiempos_dia) if tiempos_dia else 0} min")
+        avg = int(sum(tiempos_hoy)/len(tiempos_hoy)) if tiempos_hoy else 0
+        with k1: st.metric("Lavados Hoy", len(terminados_hoy))
+        with k2: st.metric("Promedio Hoy", f"{avg} min")
+        with k3: st.metric("Pico Máximo", f"{max(tiempos_hoy) if tiempos_hoy else 0} min")
+        
+        st.divider()
+        if tiempos_hoy:
+            st.caption("Distribución de Tiempos (minutos por auto)")
+            st.bar_chart(tiempos_hoy)
+        else:
+            st.info("Aún no hay autos finalizados hoy para graficar.")
 
     with tab_hist:
+        st.markdown("##### Historial General")
         if historial_data:
             df_hist = pd.DataFrame(historial_data)
-            
-            # Convertir 'Fecha' a datetime para ordenar correctamente
+            # Ordenar por fecha
             df_hist['Fecha_DT'] = pd.to_datetime(df_hist['Fecha'], format="%d/%m/%Y", errors='coerce')
             df_hist = df_hist.dropna(subset=['Fecha_DT']).sort_values('Fecha_DT')
 
-            # 1. GRÁFICO DE BARRAS (Cantidad por día)
-            st.markdown("#### 📅 Autos Lavados por Día")
+            # Gráfico 1: Cantidad
+            st.markdown("📊 **Autos lavados por día**")
             df_counts = df_hist.groupby("Fecha", sort=False)["Auto"].sum().reset_index()
             st.bar_chart(df_counts.set_index("Fecha"))
             
             st.divider()
 
-            # 2. GRÁFICO DE LÍNEA (Tiempo promedio)
-            st.markdown("#### ⏱️ Tiempo Promedio por Día (min)")
+            # Gráfico 2: Promedio
+            st.markdown("⏱️ **Tiempo promedio por día (min)**")
             df_avg = df_hist.groupby("Fecha", sort=False)["Tiempo"].mean().reset_index()
             st.line_chart(df_avg.set_index("Fecha"))
         else:
-            st.info("No hay datos históricos suficientes aún.")
+            st.info("No hay historial suficiente.")
 
 if __name__ == "__main__":
     main()
