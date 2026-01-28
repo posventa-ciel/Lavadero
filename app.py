@@ -62,9 +62,9 @@ def calcular_minutos(h1, h2):
     except: return 0
 
 def obtener_minutos_orden(hora_str):
-    if not hora_str or ":" not in hora_str: return 99999
+    if not hora_str or ":" not in str(hora_str): return 99999
     try:
-        h, m = map(int, hora_str.split(':'))
+        h, m = map(int, str(hora_str).split(':'))
         return h * 60 + m
     except: return 99999
 
@@ -74,9 +74,9 @@ def limpiar_asesor(nombre):
     return partes[1] if len(partes) > 1 and partes[0].isdigit() else partes[0]
 
 def generar_badge_alerta(hora_prometida, now_dt):
-    if not hora_prometida or ":" not in hora_prometida: return f"<span class='badge-normal'>{hora_prometida}</span>"
+    if not hora_prometida or ":" not in str(hora_prometida): return f"<span class='badge-normal'>{hora_prometida}</span>"
     try:
-        h, m = map(int, hora_prometida.split(':'))
+        h, m = map(int, str(hora_prometida).split(':'))
         prometida_dt = now_dt.replace(hour=h, minute=m, second=0, microsecond=0)
         diff = (prometida_dt - now_dt).total_seconds() / 60
         if diff < 0: return f"<div class='badge badge-red'>{hora_prometida}<br>DEMORADO</div>"
@@ -115,26 +115,22 @@ def main():
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
         
-        # FILTRO EXCLUSIÓN: No vino, No se lava, etc.
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
-        
-        # FILTRO BÚSQUEDA
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1] and not estado) or fila[IDX_FIN2]
         
-        # Detectar si es de hoy (o de la fecha seleccionada)
+        # Un auto está finalizado si el estado dice FINALIZADO o tiene marcas de fin
+        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
-        # Detectar atraso (fecha anterior a la seleccionada)
+        # Detectar atraso
         es_atrasado = False
-        if not es_finalizado:
-            try:
-                f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
-                if f_dt < fecha_sel: es_atrasado = True
-            except: pass
+        try:
+            f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
+            if f_dt < fecha_sel: es_atrasado = True
+        except: pass
 
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -144,18 +140,21 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
         if es_finalizado:
-            if es_de_fecha: terminados_hoy.append(item)
+            # Si estoy viendo hoy, incluyo los de fecha hoy O los que estaban atrasados pero se terminaron
+            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
+                terminados_hoy.append(item)
         else:
-            if es_de_fecha or es_atrasado: pendientes.append(item)
+            # En pendientes va lo de hoy o lo que viene atrasado y sigue sin terminarse
+            if es_de_fecha or es_atrasado:
+                pendientes.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
 
     with tab1:
-        # --- SECCIÓN PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
-            # ORDEN: Primero los atrasados, luego por horario prometido
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             cols_p = [0.8, 0.8, 2, 0.8, 1.4]
             for p in pendientes:
@@ -167,13 +166,10 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        # --- ESTADO: INICIAL (Botón Play) ---
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        
-                        # --- ESTADO: EN LAVADO (Botones Pausa o Fin) ---
                         elif p['ini'] and not p['fin']:
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -182,22 +178,17 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                        
-                        # --- ESTADO: PAUSA (Botón Repaso/Reanudar) ---
                         elif p['est'] == "PAUSA":
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                        
-                        # --- ESTADO: REPASO (Botón Finalizar Segundo Tiempo) ---
                         elif p['est'] == "REPASO":
                             if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # --- SECCIÓN FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
