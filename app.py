@@ -9,47 +9,42 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- LOGO PEUGEOT (DATA URI BASE64) ---
-# Esta cadena larga ES la imagen. No se descarga de internet.
+# --- LOGO ENCRIPTADO (SOLUCIÓN HTML PURO) ---
 LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAhFBMVEUAAAAA//8AzMwA/wAAzP8A//8MzMwMzP8AmZkAmf8zMzMAZmYAzMwz/zMA/8wz//8z/MwzAABmZgBm/2Zm//9m/5lm/2YzM2YzM5lmZswzM8wzM/8zMzMzAAAAmcwAmf8AmZkAZswAZpkAZgAAZjMAZswAMzMAM2YAMwAAM8wAM/8AMwBmZma2AAAAxnRSTlMAu4vC/vC3j/7+/v7+8q+Z/v7+q4uL/v7+u/7+tI/+/v7+i/7+s5n+tP7+i4v+/v7+3/v7+i/7+8v7+/v7+tP7+8ov+/v7+q4v+/v7+q/7+/v6L/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v63/v7+i/7+/v7+/v7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+q/7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+8r7r3wAAAfdJREFUSMe1lU1rwlAQx08T32qsFxF8W6u26sVaD1ZBqCCFInioQvHQAwqeexD8f9+kE81LFl1P3eG3CNnN/Oad5M2E4J9A6LgO05iWwzAMg9gO05QG/xLItw7bSiaTrm3fOiyCDeR7j+tUq9Vut0/53uclhEB+DLhOvV4fDAbD4ZB9DDgR+Tng5vP5YDAajUbD4Xg8Ho3H48F87uZE5NeIm8/n0+l0Op3NZrPZbDabz6fT+dzLi8ivCTefz2ez2Ww2m81ms9lsNpvNZtP53MuLyK8JN5/PZ7PZbDabzWaz2Ww2m81m0/ncy4vIrwk3n89ns9lsNpvNZrO5d1y31+s5/wEivybcfD6fTqfT6XQ2m81ms9lsPp9O53MvLyK/Btx8Ph8MRqPRaDgcXl9fX11djcfjwXzu5kTkx4Dr1Ov1wWAwHA7ZxwD7I0gI5FuP61Sr1W63T/neZyVEIP86bCuZTLq2fessgQzDMI1p2QzDMAx7J7bDNKXBP4FwHIdpDMuwDMvYDtM49k8gXNdhGtNyGIZhENthmtLgXwL51mFbyWTS9X91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3WI/zrEfx3ivw7xX4f4r0P81yH+6xD/dYj/OsR/HeK/DvFfh/ivQ/zXIf7rEP91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3XIf/0G26wW10u4R5gAAAAASUVORK5CYII="
 
-# --- ESTILOS ---
+# --- ESTILOS CSS (CORREGIDOS) ---
 st.markdown("""
 <style>
-    /* Ajuste para que el encabezado no quede tapado */
+    /* 1. MARGEN DE SEGURIDAD */
+    /* Damos 4rem de aire arriba. Si no, la barra de Streamlit tapa el título */
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 4rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* Títulos */
-    .main-title { font-size: 24px !important; font-weight: bold; color: #00235d; margin: 0; line-height: 1.2; }
-    .sub-title { font-size: 14px; color: #666; margin: 0; }
-    
-    /* Filas Compactas */
+    /* 2. FILAS COMPACTAS (Para ver muchos autos) */
     .row-container { 
-        padding: 2px 0 !important; 
+        padding: 3px 0 !important; 
         border-bottom: 1px solid #ddd; 
         align-items: center; 
-        height: 38px !important; /* Altura fija */
+        min-height: 38px !important;
     }
     
-    /* Botones */
+    /* 3. BOTONES DELGADOS */
     .stButton button { 
         height: 28px !important; 
-        font-size: 12px !important; 
+        font-size: 11px !important; 
         padding: 0px 5px !important; 
-        margin-top: 2px !important;
+        margin-top: 3px !important;
     }
     
-    /* Eliminar márgenes extra */
-    p { margin-bottom: 0px !important; }
-    
-    /* Estilos de Texto */
+    /* 4. TEXTOS */
+    p { margin: 0px !important; } /* Quita espacio entre líneas */
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
     .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #222; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .txt-asesor { color: #555; font-size: 12px; }
+    .txt-modelo { color: #222; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-asesor { color: #666; font-size: 11px; font-style: italic; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,23 +94,17 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER NATIVO CON COLUMNAS (SOLUCIÓN DEFINITIVA IMAGEN) ---
-    c_logo, c_text = st.columns([0.1, 0.9])
-    
-    with c_logo:
-        # Usamos st.image nativo que es más robusto para mostrar Base64
-        st.image(LOGO_B64, width=55)
-        
-    with c_text:
-        # Título HTML para ajustar márgenes
-        st.markdown("""
-        <div style="padding-top: 5px;">
-            <p class="main-title">CONTROL DE LAVADERO</p>
-            <p class="sub-title">Gestión de Tiempos y Calidad</p>
+    # --- HEADER BLINDADO (HTML DIRECTO) ---
+    # Usamos flexbox directo en HTML. No hay forma de que falle la alineación o la imagen.
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+        <img src="{LOGO_B64}" width="55" height="55" style="border-radius: 6px;">
+        <div style="line-height: 1.2;">
+            <span style="font-size: 26px; font-weight: bold; color: #00235d; display: block;">CONTROL DE LAVADERO</span>
+            <span style="font-size: 14px; color: #666;">Gestión Postventa</span>
         </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<hr style='margin: 5px 0; border-top: 2px solid #00235d;'>", unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
@@ -173,7 +162,7 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
-        # Datos Operativos
+        # OPERATIVO
         if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
@@ -194,7 +183,7 @@ def main():
             else:
                 pendientes.append(item)
 
-        # Datos Históricos
+        # HISTORICO
         if es_finalizado:
             try:
                 fecha_clean = fecha_celda.split()[0]
@@ -204,7 +193,6 @@ def main():
                     historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
             except: pass
 
-    # --- PESTAÑAS ---
     tab_op, tab_hoy, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
 
     with tab_op:
@@ -300,7 +288,7 @@ def main():
         if tiempos_hoy:
             st.bar_chart(tiempos_hoy)
         else:
-            st.info("Sin datos para graficar hoy.")
+            st.info("Sin datos de tiempos para graficar hoy.")
 
     with tab_hist:
         st.markdown("##### Historial General")
