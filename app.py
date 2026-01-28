@@ -55,11 +55,16 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def calcular_minutos(h1, h2):
+def calcular_minutos_totales(h_ini1, h_fin1, h_ini2, h_fin2):
+    total = 0
+    fmt = "%H:%M"
     try:
-        fmt = "%H:%M"
-        return int((datetime.strptime(h2, fmt) - datetime.strptime(h1, fmt)).total_seconds() / 60)
-    except: return 0
+        if h_ini1 and h_fin1:
+            total += (datetime.strptime(h_fin1, fmt) - datetime.strptime(h_ini1, fmt)).total_seconds() / 60
+        if h_ini2 and h_fin2:
+            total += (datetime.strptime(h_fin2, fmt) - datetime.strptime(h_ini2, fmt)).total_seconds() / 60
+    except: pass
+    return int(total)
 
 def obtener_minutos_orden(hora_str):
     if not hora_str or ":" not in str(hora_str): return 99999
@@ -107,8 +112,10 @@ def main():
         fecha_sel = st.date_input("Ver fecha:", hoy_date)
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
+        st.markdown("---")
+        mes_historial = st.selectbox("Mes Historial:", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=hoy_date.month-1)
 
-    pendientes, terminados_hoy = [], []
+    pendientes, terminados_hoy, historico_mes = [], [], []
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
@@ -120,37 +127,44 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        
-        # Un auto está finalizado si el estado dice FINALIZADO o tiene marcas de fin
         es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
-        # Detectar atraso
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
             if f_dt < fecha_sel: es_atrasado = True
         except: pass
 
+        # Calculo de minutos totales (Suma ambos tramos si existen)
+        minutos_lavado = calcular_minutos_totales(fila[IDX_INI1], fila[IDX_FIN1], fila[IDX_INI2], fila[IDX_FIN2])
+
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
             "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
-            "min_orden": obtener_minutos_orden(fila[IDX_PRO])
+            "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "tiempo": minutos_lavado,
+            "fecha_dt": f_celda.split()[0]
         }
 
-        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
+        # Clasificación Operación
         if es_finalizado:
-            # Si estoy viendo hoy, incluyo los de fecha hoy O los que estaban atrasados pero se terminaron
             if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            # En pendientes va lo de hoy o lo que viene atrasado y sigue sin terminarse
             if es_de_fecha or es_atrasado:
                 pendientes.append(item)
 
-    tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
+        # Clasificación Historial (Filtro Mes)
+        try:
+            meses_nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            f_dt_obj = datetime.strptime(item["fecha_dt"], "%d/%m/%Y")
+            if meses_nombres[f_dt_obj.month-1] == mes_historial and f_dt_obj.year == hoy_date.year:
+                if es_finalizado: historico_mes.append(item)
+        except: pass
+
+    tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 KPIs", "📅 Historial"])
 
     with tab1:
         st.markdown(f"**Pendientes ({len(pendientes)})**")
@@ -211,6 +225,42 @@ def main():
                         with c_txt:
                             st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+
+    with tab2:
+        st.markdown("### KPIs del Día")
+        if terminados_hoy:
+            df_dia = pd.DataFrame(terminados_hoy)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Autos Lavados", len(df_dia))
+            m2.metric("Tiempo Promedio (min)", f"{int(df_dia['tiempo'].mean())}")
+            m3.metric("Controles OK", len(df_dia[df_dia['ok']]))
+            
+            st.markdown("---")
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                fig_ase = px.bar(df_dia['ase'].value_counts(), title="Lavados por Asesor", labels={'value':'Cantidad', 'index':'Asesor'})
+                st.plotly_chart(fig_ase, use_container_width=True)
+            with col_chart2:
+                fig_time = px.histogram(df_dia, x="tiempo", title="Distribución de Tiempos", labels={'tiempo':'Minutos'})
+                st.plotly_chart(fig_time, use_container_width=True)
+        else:
+            st.info("No hay datos de finalizados para el día seleccionado.")
+
+    with tab3:
+        st.markdown(f"### Histórico: {mes_historial}")
+        if historico_mes:
+            df_mes = pd.DataFrame(historico_mes)
+            resumen_diario = df_mes.groupby('fecha_dt').agg(
+                Cantidad=('dom', 'count'),
+                Promedio_Tiempo=('tiempo', 'mean')
+            ).reset_index()
+            
+            st.dataframe(resumen_diario, use_container_width=True)
+            
+            fig_evol = px.line(resumen_diario, x='fecha_dt', y='Cantidad', title="Evolución Diaria de Lavados", markers=True)
+            st.plotly_chart(fig_evol, use_container_width=True)
+        else:
+            st.warning(f"No hay registros para el mes de {mes_historial}.")
 
 if __name__ == "__main__":
     main()
