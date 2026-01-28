@@ -109,10 +109,13 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
+        
+        # Un auto está FINALIZADO solo si dice FINALIZADO o si ya tiene fin2 (repaso terminado)
+        # Si está en PAUSA o LAVANDO, NO es finalizado.
+        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN2].strip() != "")
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
 
-        # Lógica para detectar si es un auto atrasado de días anteriores
+        # Lógica para detectar si es un auto atrasado
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -128,14 +131,11 @@ def main():
         }
 
         if es_finalizado:
-            # MOSTRAR EN TERMINADOS SI:
-            # 1. Es de la fecha seleccionada
-            # 2. O es el AG99SJ (o cualquier atrasado) que terminaste hoy estando en la vista de hoy
-            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
+            # Aparece en terminados si es de hoy o si es un atrasado que se terminó hoy
+            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date):
                 terminados_hoy.append(item)
         else:
-            # MOSTRAR EN PENDIENTES SI:
-            # Es de hoy o es un atrasado que todavía no se terminó
+            # Aparece en PENDIENTES si es de hoy o si es atrasado (incluye LAVANDO y PAUSA)
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
@@ -155,11 +155,12 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        if not p['ini']:
+                        # LÓGICA DE BOTONES RECUPERADA
+                        if not p['ini'] or p['est'] == "":
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        elif p['ini'] and not p['fin']:
+                        elif p['est'] == "LAVANDO" or (p['ini'] and not p['fin']):
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
@@ -171,6 +172,10 @@ def main():
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁", key=f"f2{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>")
@@ -196,6 +201,9 @@ def main():
                         with c_txt:
                             st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+
+    with tab2:
+        st.write("Gráficos de métricas activos.")
 
 if __name__ == "__main__":
     main()
