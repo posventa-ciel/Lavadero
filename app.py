@@ -21,21 +21,16 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    
-    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
-    
-    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
-
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -114,17 +109,18 @@ def main():
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
-        
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- CAMBIO CLAVE AQUÍ: Solo FINALIZADO mueve al auto de tabla ---
+        # --- CORRECCIÓN AQUÍ ---
+        # Solo se considera finalizado si el estado es FINALIZADO. 
+        # La pausa escribe en FIN1, pero mantiene el estado PAUSA, así se queda en pendientes.
         es_finalizado = (estado == "FINALIZADO")
-        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
+        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
