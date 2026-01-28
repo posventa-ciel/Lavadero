@@ -10,68 +10,67 @@ import plotly.express as px
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- LOGO SVG (CÓDIGO PURO, IMPOSIBLE QUE FALLE) ---
-# Este es el dibujo vectorial del León (simplificado) y texto
+# --- LOGO SVG SIMPLIFICADO (Anti-Error) ---
 LOGO_SVG = """
-<svg width="200" height="50" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="50" height="50" rx="5" fill="#00235d"/>
-  <path d="M15 10 L15 40 L25 40 C35 40 35 30 25 30 L15 30" stroke="white" stroke-width="3" fill="none"/>
-  <text x="60" y="32" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#00235d">PEUGEOT</text>
+<svg width="40" height="40" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="50" height="50" rx="8" fill="white"/>
+  <path d="M10 25 L20 25 L20 40" stroke="#00235d" stroke-width="4" fill="none"/>
+  <path d="M10 10 L40 10 L40 25 L10 25" stroke="#00235d" stroke-width="4" fill="none"/>
 </svg>
 """
 
-# --- ESTILOS CSS "HIGH DENSITY" ---
+# --- ESTILOS CSS (DISEÑO SLIM) ---
 st.markdown("""
 <style>
-    /* 1. Ajuste de Techo */
+    /* 1. PEGAR AL TECHO */
     .block-container { 
-        padding-top: 1.5rem !important; 
+        padding-top: 1rem !important; 
         padding-bottom: 1rem !important; 
     }
     
-    /* 2. Encabezado Compacto */
+    /* 2. ENCABEZADO DELGADO */
     .portada-container { 
         background: linear-gradient(90deg, #00235d 0%, #004080 100%); 
         color: white; 
-        padding: 10px 15px; /* Menos relleno */
+        padding: 8px 15px; /* Relleno mínimo */
         border-radius: 6px; 
         margin-bottom: 10px; 
         display: flex; 
         justify-content: space-between; 
         align-items: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+        height: 60px; /* Altura fija controlada */
     }
     
-    /* 3. Filas ULTRA COMPACTAS */
-    .compact-row {
-        border-bottom: 1px solid #e0e0e0;
-        padding: 2px 0 !important; /* Mínimo espacio */
+    /* 3. FILAS SUPER COMPACTAS */
+    .row-card {
+        background-color: white;
+        border-bottom: 1px solid #eee;
+        padding: 2px 5px !important; /* Casi sin espacio vertical */
         min-height: 30px !important;
         display: flex;
         align-items: center;
     }
     
-    /* 4. Textos Ajustados */
+    /* 4. TEXTOS DE TABLA */
     p { margin: 0 !important; }
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 13px; }
     .txt-patente { color: #00235d; font-weight: bold; font-size: 13px; }
     .txt-modelo { color: #333; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-size: 11px; }
     
-    /* 5. Botones Slim */
+    /* 5. BOTONES PEQUEÑOS */
     .stButton button {
-        height: 24px !important; /* Altura mínima */
-        font-size: 11px !important;
-        padding: 0px 8px !important;
-        border: none;
+        height: 24px !important;
+        font-size: 10px !important;
+        padding: 0px 10px !important;
         line-height: 1 !important;
         margin-top: 2px !important;
     }
     
-    /* 6. Espacios entre elementos de Streamlit */
-    div[data-testid="stVerticalBlock"] > div {
-        gap: 0rem !important;
-    }
+    /* Quitar espacios extra de Streamlit */
+    div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -121,22 +120,23 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- PROCESAMIENTO FECHAS ---
     tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- PORTADA COMPACTA (SVG INCRUSTADO) ---
+    # --- PORTADA HTML SIMPLE Y SEGURA ---
     st.markdown(f'''
     <div class="portada-container">
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px;">
              {LOGO_SVG}
-             <div style="margin-left: -120px;"> <span style="font-size: 1.2rem; font-weight: bold; color: white;">CONTROL LAVADERO</span>
+             <div>
+                <div style="font-size: 1.4rem; font-weight: bold; line-height: 1;">CONTROL LAVADERO</div>
+                <div style="font-size: 0.8rem; opacity: 0.8;">Postventa</div>
              </div>
         </div>
-        <div style="text-align: right; line-height: 1.2;">
-            <div style="font-size: 1rem; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
-            <div style="font-size: 0.8rem; opacity: 0.8;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
+        <div style="text-align: right; line-height: 1.1;">
+            <div style="font-size: 0.9rem; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
+            <div style="font-size: 0.8rem;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -145,6 +145,7 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
+    # INDICES
     IDX_FECHA = 0
     IDX_ASESOR = 2
     IDX_DOMINIO = 3
@@ -237,7 +238,7 @@ def main():
             
             for p in pendientes:
                 with st.container():
-                    # FILA COMPACTA MANUAL
+                    st.markdown('<div class="row-card">', unsafe_allow_html=True)
                     col = st.columns([0.6, 0.8, 2, 0.8, 1.5])
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
@@ -247,7 +248,7 @@ def main():
                     
                     with col[4]:
                         if not p['ini']:
-                            if st.button("▶️ INICIO", key=f"g{p['fila']}", type="primary"):
+                            if st.button("▶️", key=f"g{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INICIO + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "LAVANDO")
                                 st.rerun()
@@ -262,16 +263,16 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
                         elif p['est'] == "PAUSA" and not p['ini2']:
-                            if st.button("🔄 RETOMAR", key=f"r{p['fila']}"):
+                            if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "REPASO")
                                 st.rerun()
                         elif p['ini2'] and not p['fin2']:
-                            if st.button("🏁 FIN", key=f"f2{p['fila']}"):
+                            if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
-                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("Sin pendientes.")
 
@@ -290,7 +291,8 @@ def main():
             t6.caption("OK")
             
             for t in terminados_hoy:
-                 with st.container():
+                with st.container():
+                     st.markdown('<div class="row-card">', unsafe_allow_html=True)
                      r = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
                      fin_s = t['fin2'] if t['fin2'] else t['fin']
                      r[0].write(t['ini'])
@@ -303,7 +305,7 @@ def main():
                         if nk != t['ok']:
                             hoja.update_cell(t['fila'], IDX_CONTROL + 1, "OK" if nk else "")
                             st.rerun()
-                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+                     st.markdown('</div>', unsafe_allow_html=True)
 
     with tab_hoy:
         avg_hoy = int(sum(tiempos_hoy)/len(tiempos_hoy)) if tiempos_hoy else 0
@@ -314,8 +316,8 @@ def main():
         
         st.divider()
         if tiempos_hoy:
-            fig = px.histogram(x=tiempos_hoy, nbins=10, labels={'x':'Minutos', 'y':'Autos'}, title="Tiempos de Hoy", color_discrete_sequence=['#00235d'])
-            fig.update_layout(height=300)
+            fig = px.histogram(x=tiempos_hoy, nbins=10, labels={'x':'Minutos', 'y':'Autos'}, title="Distribución de Tiempos", color_discrete_sequence=['#00235d'])
+            fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_hist:
