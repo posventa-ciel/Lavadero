@@ -110,11 +110,9 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Un auto está finalizado si el estado es FINALIZADO o tiene marcas de fin
-        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
 
-        # Detectar si es un auto de días anteriores
+        # Detectar atraso (fecha anterior a la seleccionada)
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -129,11 +127,14 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        if es_finalizado:
-            # LÓGICA DE RECUPERACIÓN: Si estoy en la vista de hoy, incluyo los de hoy Y los atrasados ya terminados
+        # --- CORRECCIÓN DE LÓGICA DE LISTADO ---
+        if estado == "FINALIZADO":
+            # SOLO mostramos en terminados si es de la fecha elegida en el calendario
+            # o si es un atrasado que acabamos de terminar hoy (estando en la vista de hoy)
             if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date):
                 terminados_hoy.append(item)
         else:
+            # En pendientes mostramos lo de hoy que no se terminó + lo atrasado que no se terminó
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
@@ -153,12 +154,10 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
-                        # Botón INICIAR
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        # Botones PAUSA / FIN
                         elif p['ini'] and not p['fin']:
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -167,12 +166,10 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                        # Botón REANUDAR (REPASO)
                         elif p['est'] == "PAUSA":
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                        # Botón FINALIZAR REPASO
                         elif p['est'] == "REPASO":
                             if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
