@@ -9,62 +9,68 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS "MAXIMIZE ROWS" ---
+# --- ESTILOS "VISUAL FIX" ---
 st.markdown("""
 <style>
-    /* 1. PEGAR AL TECHO: Padding mínimo arriba */
+    /* 1. CORRECCIÓN DE ALTURA: Bajamos un poco para que no lo tape la barra de Streamlit */
     .block-container {
-        padding-top: 0.5rem !important;
+        padding-top: 3rem !important; /* Antes estaba en 0.5rem y se tapaba */
         padding-bottom: 1rem !important;
-        margin-top: 0 !important;
     }
     
-    /* 2. HEADER ULTRA COMPACTO */
+    /* 2. HEADER: Diseño limpio y visible */
     .header-div {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding-bottom: 5px;
-        margin-bottom: 5px;
+        gap: 12px;
+        padding-bottom: 8px;
         border-bottom: 2px solid #00235d;
+        margin-bottom: 10px;
     }
     .main-title { 
-        font-size: 18px !important; /* Título más chico */
+        font-size: 20px !important; 
         font-weight: bold; 
         color: #00235d; 
         margin: 0 !important; 
         line-height: 1.2;
     }
     .sub-title { 
-        font-size: 12px; 
+        font-size: 13px; 
         color: #666; 
         margin: 0 !important; 
     }
     
-    /* 3. FILAS DELGADAS (Para ganar esa fila extra) */
-    .row-container { 
-        padding: 2px 0 !important; 
-        border-bottom: 1px solid #eee; 
-        align-items: center; 
-        min-height: 30px !important;
+    /* 3. ELIMINAR ESPACIO SOBRANTE EN TEXTOS */
+    /* Esto quita el margen automático de los párrafos que separaba las filas */
+    p {
+        margin-bottom: 0px !important;
     }
     
-    /* 4. FUENTES AJUSTADAS */
-    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 13px; }
-    .txt-patente { color: #004488; font-weight: bold; font-size: 13px; }
-    .txt-modelo { color: #333; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .txt-asesor { color: #666; font-size: 11px; font-style: italic; }
+    /* 4. FILAS COMPACTAS */
+    .row-container { 
+        padding: 4px 0 !important; 
+        border-bottom: 1px solid #eee; 
+        align-items: center; 
+        min-height: 32px !important;
+    }
     
-    /* 5. BOTONES SLIM */
+    /* 5. BOTONES ALINEADOS */
     .stButton button { 
         width: 100%; 
         border-radius: 4px; 
         font-weight: 600; 
-        font-size: 11px !important;
-        height: 26px !important; /* Botón bien bajito */
+        font-size: 12px !important;
+        height: 28px !important;
         padding: 0px !important;
         line-height: 1 !important;
+        margin-top: 2px !important; /* Pequeño ajuste para centrar con el texto */
     }
+
+    /* Estilos de Texto */
+    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
+    .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
+    .txt-modelo { color: #333; font-size: 13px; font-weight: 500; }
+    .txt-asesor { color: #666; font-size: 12px; font-style: italic; }
 
     /* KPI Cards */
     .kpi-card { 
@@ -125,13 +131,13 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER MANUAL (Para control total del tamaño) ---
+    # --- HEADER MANUAL ---
     st.markdown("""
     <div class="header-div">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="35">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="40">
         <div>
-            <p class="main-title">CONTROL LAVADERO</p>
-            <p class="sub-title">Gestión Postventa</p>
+            <div class="main-title">CONTROL LAVADERO</div>
+            <div class="sub-title">Gestión Postventa</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
