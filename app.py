@@ -9,38 +9,37 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
+# --- LOGO PEUGEOT EN CÓDIGO (BASE64) - NO REQUIERE INTERNET ---
+LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAhFBMVEUAAAAA//8AzMwA/wAAzP8A//8MzMwMzP8AmZkAmf8zMzMAZmYAzMwz/zMA/8wz//8z/MwzAABmZgBm/2Zm//9m/5lm/2YzM2YzM5lmZswzM8wzM/8zMzMzAAAAmcwAmf8AmZkAZswAZpkAZgAAZjMAZswAMzMAM2YAMwAAM8wAM/8AMwBmZma2AAAAxnRSTlMAu4vC/vC3j/7+/v7+8q+Z/v7+q4uL/v7+u/7+tI/+/v7+i/7+s5n+tP7+i4v+/v7+3/v7+i/7+8v7+/v7+tP7+8ov+/v7+q4v+/v7+q/7+/v6L/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v63/v7+i/7+/v7+/v7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+q/7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+8r7r3wAAAfdJREFUSMe1lU1rwlAQx08T32qsFxF8W6u26sVaD1ZBqCCFInioQvHQAwqeexD8f9+kE81LFl1P3eG3CNnN/Oad5M2E4J9A6LgO05iWwzAMg9gO05QG/xLItw7bSiaTrm3fOiyCDeR7j+tUq9Vut0/53uclhEB+DLhOvV4fDAbD4ZB9DDgR+Tng5vP5YDAajUbD4Xg8Ho3H48F87uZE5NeIm8/n0+l0Op3NZrPZbDabz6fT+dzLi8ivCTefz2ez2Ww2m81ms9lsNpvNZtP53MuLyK8JN5/PZ7PZbDabzWaz2Ww2m81m0/ncy4vIrwk3n89ns9lsNpvNZrO5d1y31+s5/wEivybcfD6fTqfT6XQ2m81ms9lsPp9O53MvLyK/Btx8Ph8MRqPRaDgcXl9fX11djcfjwXzu5kTkx4Dr1Ov1wWAwHA7ZxwD7I0gI5FuP61Sr1W63T/neZyVEIP86bCuZTLq2fessgQzDMI1p2QzDMAx7J7bDNKXBP4FwHIdpDMuwDMvYDtM49k8gXNdhGtNyGIZhENthmtLgXwL51mFbyWTS9X91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3WI/zrEfx3ivw7xX4f4r0P81yH+6xD/dYj/OsR/HeK/DvFfh/ivQ/zXIf7rEP91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3XIf/0G26wW10u4R5gAAAAASUVORK5CYII="
+
 # --- ESTILOS VISUALES ---
 st.markdown("""
 <style>
-    /* 1. AJUSTE DE MARGEN SUPERIOR (Para que se vea el título) */
+    /* 1. MARGEN SUPERIOR AJUSTADO */
     .block-container {
-        padding-top: 3.5rem !important; /* Espacio suficiente para que no lo tape la barra */
+        padding-top: 3.5rem !important; 
         padding-bottom: 1rem !important;
     }
     
-    /* 2. HEADER CLARO Y VISIBLE */
+    /* 2. HEADER */
     .header-div {
         display: flex; 
         align-items: center; 
         gap: 15px;
-        padding-bottom: 15px; 
+        padding-bottom: 10px; 
         border-bottom: 2px solid #00235d; 
-        margin-bottom: 15px;
+        margin-bottom: 10px;
     }
     .main-title { 
-        font-size: 28px !important; 
+        font-size: 26px !important; 
         font-weight: bold; 
         color: #00235d; 
         margin: 0 !important; 
         line-height: 1.1; 
     }
-    .sub-title {
-        font-size: 14px;
-        color: #666;
-        margin: 0 !important;
-    }
+    .sub-title { font-size: 14px; color: #666; margin: 0 !important; }
     
-    /* 3. FILAS COMPACTAS (Pero legibles) */
+    /* 3. FILAS COMPACTAS */
     .row-container { 
         padding: 3px 0 !important; 
         border-bottom: 1px solid #ddd; 
@@ -48,7 +47,7 @@ st.markdown("""
         height: 36px !important;
     }
     
-    /* 4. BOTONES AJUSTADOS */
+    /* 4. BOTONES */
     .stButton button { 
         height: 28px !important; 
         font-size: 12px !important; 
@@ -56,10 +55,8 @@ st.markdown("""
         margin-top: 2px !important;
     }
     
-    /* 5. ELIMINAR ESPACIOS INNECESARIOS */
+    /* 5. TEXTOS Y ESPACIOS */
     p { margin-bottom: 0px !important; }
-    
-    /* Estilos de texto */
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
     .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
     .txt-modelo { color: #222; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -114,10 +111,10 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER RESTAURADO ---
-    st.markdown("""
+    # --- HEADER CON IMAGEN BLINDADA (BASE64) ---
+    st.markdown(f"""
     <div class="header-div">
-        <img src="https://media.tenor.com/images/a444a821739c639691b0b5711c750a10/tenor.gif" width="60" style="border-radius: 8px;">
+        <img src="{LOGO_B64}" width="50" style="border-radius: 4px;">
         <div>
             <div class="main-title">CONTROL DE LAVADERO</div>
             <div class="sub-title">Gestión de Tiempos y Calidad</div>
@@ -155,8 +152,8 @@ def main():
 
     pendientes = []
     terminados_hoy = []
-    tiempos_hoy = [] # Lista de tiempos SOLO de hoy
-    historial_data = [] # Lista de TODO el historial
+    tiempos_hoy = []
+    historial_data = []
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
@@ -173,7 +170,6 @@ def main():
 
         es_finalizado = (estado == "FINALIZADO") or (fin1 and not estado) or fin2
         
-        # Filtro de HOY
         es_hoy_filtro = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
         
         es_atrasado = False
@@ -183,7 +179,6 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
-        # 1. ARMADO DE LISTAS OPERATIVAS (HOY + PENDIENTES)
         if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
@@ -197,7 +192,6 @@ def main():
             }
             if es_finalizado:
                 terminados_hoy.append(item)
-                # Calcular tiempo solo si es de hoy para el grafico de hoy
                 if es_hoy_filtro:
                     t = calcular_minutos(ini1, fin1)
                     if ini2 and fin2: t += calcular_minutos(ini2, fin2)
@@ -205,24 +199,18 @@ def main():
             else:
                 pendientes.append(item)
 
-        # 2. ARMADO DE HISTORIAL (TODO)
         if es_finalizado:
             try:
-                # Normalizamos la fecha para agrupar
-                fecha_clean = fecha_celda.split()[0] # Toma lo que está antes del espacio si hay hora
+                fecha_clean = fecha_celda.split()[0]
                 t_total = calcular_minutos(ini1, fin1)
                 if ini2 and fin2: t_total += calcular_minutos(ini2, fin2)
-                
-                # Guardamos si el tiempo es lógico (menos de 300 min)
                 if t_total > 0 and t_total < 300: 
                     historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
             except: pass
 
-    # --- PESTAÑAS ---
     tab_op, tab_hoy, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
 
     with tab_op:
-        # PENDIENTES
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
@@ -275,7 +263,6 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # FINALIZADOS
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
@@ -314,32 +301,28 @@ def main():
         
         st.divider()
         if tiempos_hoy:
-            st.caption("Distribución de Tiempos (minutos por auto)")
             st.bar_chart(tiempos_hoy)
         else:
-            st.info("Aún no hay autos finalizados hoy para graficar.")
+            st.info("Esperando primeros autos...")
 
     with tab_hist:
         st.markdown("##### Historial General")
         if historial_data:
             df_hist = pd.DataFrame(historial_data)
-            # Ordenar por fecha
             df_hist['Fecha_DT'] = pd.to_datetime(df_hist['Fecha'], format="%d/%m/%Y", errors='coerce')
             df_hist = df_hist.dropna(subset=['Fecha_DT']).sort_values('Fecha_DT')
 
-            # Gráfico 1: Cantidad
             st.markdown("📊 **Autos lavados por día**")
             df_counts = df_hist.groupby("Fecha", sort=False)["Auto"].sum().reset_index()
             st.bar_chart(df_counts.set_index("Fecha"))
             
             st.divider()
 
-            # Gráfico 2: Promedio
-            st.markdown("⏱️ **Tiempo promedio por día (min)**")
+            st.markdown("⏱️ **Tiempo promedio (min)**")
             df_avg = df_hist.groupby("Fecha", sort=False)["Tiempo"].mean().reset_index()
             st.line_chart(df_avg.set_index("Fecha"))
         else:
-            st.info("No hay historial suficiente.")
+            st.info("Sin historial suficiente.")
 
 if __name__ == "__main__":
     main()
