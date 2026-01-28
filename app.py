@@ -9,54 +9,73 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS OPTIMIZADOS PARA VER 6 FILAS ---
+# --- ESTILOS "MAXIMIZE ROWS" ---
 st.markdown("""
 <style>
-    /* 1. Subir el techo lo máximo posible sin cortar */
+    /* 1. PEGAR AL TECHO: Padding mínimo arriba */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important;
         padding-bottom: 1rem !important;
+        margin-top: 0 !important;
     }
     
-    /* 2. Header más compacto */
-    .main-header { font-size: 24px; font-weight: bold; color: #003366; margin: 0; }
-    .sub-header { font-size: 13px; color: #666; margin-bottom: 5px; }
+    /* 2. HEADER ULTRA COMPACTO */
+    .header-div {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 5px;
+        margin-bottom: 5px;
+        border-bottom: 2px solid #00235d;
+    }
+    .main-title { 
+        font-size: 18px !important; /* Título más chico */
+        font-weight: bold; 
+        color: #00235d; 
+        margin: 0 !important; 
+        line-height: 1.2;
+    }
+    .sub-title { 
+        font-size: 12px; 
+        color: #666; 
+        margin: 0 !important; 
+    }
     
-    /* 3. Filas más delgadas (Padding reducido de 6px a 2px) */
+    /* 3. FILAS DELGADAS (Para ganar esa fila extra) */
     .row-container { 
-        padding: 3px 0; 
-        border-bottom: 1px solid #e0e0e0; 
+        padding: 2px 0 !important; 
+        border-bottom: 1px solid #eee; 
         align-items: center; 
-        min-height: 35px; /* Altura mínima reducida */
+        min-height: 30px !important;
     }
     
-    /* 4. Textos: Mantenemos legibilidad pero ajustamos espacios */
-    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
-    .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #333; font-size: 13px; font-weight: 500; line-height: 1.1; } /* Line-height ajustado */
-    .txt-asesor { color: #555; font-size: 12px; font-style: italic; }
+    /* 4. FUENTES AJUSTADAS */
+    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 13px; }
+    .txt-patente { color: #004488; font-weight: bold; font-size: 13px; }
+    .txt-modelo { color: #333; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-asesor { color: #666; font-size: 11px; font-style: italic; }
     
-    /* 5. Botones Slim (Más delgados) */
+    /* 5. BOTONES SLIM */
     .stButton button { 
         width: 100%; 
         border-radius: 4px; 
         font-weight: 600; 
-        font-size: 12px;
-        height: 28px !important; /* Altura forzada a 28px */
+        font-size: 11px !important;
+        height: 26px !important; /* Botón bien bajito */
         padding: 0px !important;
-        margin-top: 0px !important;
+        line-height: 1 !important;
     }
 
-    /* KPI Cards compactas */
+    /* KPI Cards */
     .kpi-card { 
         background-color: white; 
         border: 1px solid #ddd; 
         border-radius: 6px; 
-        padding: 8px; 
+        padding: 5px; 
         text-align: center; 
     }
-    .kpi-val { font-size: 20px; font-weight: bold; color: #003366; }
-    .kpi-lbl { font-size: 11px; color: #666; text-transform: uppercase; }
+    .kpi-val { font-size: 18px; font-weight: bold; color: #003366; }
+    .kpi-lbl { font-size: 10px; color: #666; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,13 +125,16 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER COMPACTO ---
-    col_img, col_txt = st.columns([0.1, 0.9])
-    with col_img:
-        st.image("https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg", use_container_width=True)
-    with col_txt:
-        st.markdown('<h1 class="main-header">CONTROL DE LAVADERO</h1>', unsafe_allow_html=True)
-        st.markdown('<div class="sub-header">Gestión de tiempos - Postventa</div>', unsafe_allow_html=True)
+    # --- HEADER MANUAL (Para control total del tamaño) ---
+    st.markdown("""
+    <div class="header-div">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="35">
+        <div>
+            <p class="main-title">CONTROL LAVADERO</p>
+            <p class="sub-title">Gestión Postventa</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
@@ -137,7 +159,7 @@ def main():
     hoy_date = datetime.now(tz_ar).date()
 
     with st.sidebar:
-        st.markdown("### Filtros")
+        st.markdown("**Filtros**")
         fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
@@ -194,7 +216,7 @@ def main():
             else:
                 pendientes.append(item)
 
-    tab_op, tab_kpi = st.tabs(["🚗 Operación", "📈 Indicadores"])
+    tab_op, tab_kpi = st.tabs(["🚗 Operación", "📈 KPIs"])
 
     with tab_op:
         # --- PENDIENTES ---
@@ -202,27 +224,26 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            c_h = st.columns([0.7, 1, 2.5, 0.8, 1.2])
+            c_h = st.columns([0.6, 0.8, 2.5, 0.8, 1.3])
             c_h[0].caption("HORA")
-            c_h[1].caption("PATENTE")
+            c_h[1].caption("DOMINIO")
             c_h[2].caption("MODELO")
             c_h[3].caption("ASESOR")
-            c_h[4].caption("ACCIÓN")
+            c_h[4].caption("ACCION")
             
             for p in pendientes:
                 with st.container():
-                    col = st.columns([0.7, 1, 2.5, 0.8, 1.2])
+                    col = st.columns([0.6, 0.8, 2.5, 0.8, 1.3])
                     
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
-                    # Tooltip en modelo por si se corta
                     col[2].markdown(f"<span class='txt-modelo' title='{p['mod']}'>{p['mod']}</span>", unsafe_allow_html=True)
                     col[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     
                     with col[4]:
                         if not p['ini']:
-                            if st.button("▶️ INICIAR", key=f"g{p['fila']}", type="primary"):
+                            if st.button("▶️ INICIO", key=f"g{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INICIO + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "LAVANDO")
                                 st.rerun()
@@ -248,7 +269,7 @@ def main():
                                 st.rerun()
                     st.markdown("<div class='row-container'></div>", unsafe_allow_html=True)
         else:
-            st.info("No hay vehículos pendientes.")
+            st.info("Sin pendientes.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -257,16 +278,16 @@ def main():
         if terminados:
             terminados.sort(key=lambda x: x["orden_term"])
             
-            c_t = st.columns([0.7, 0.7, 1, 2.5, 0.8, 0.5])
-            c_t[0].caption("INICIO")
+            c_t = st.columns([0.6, 0.6, 0.8, 2.5, 0.8, 0.5])
+            c_t[0].caption("INI")
             c_t[1].caption("FIN")
-            c_t[2].caption("PATENTE")
+            c_t[2].caption("DOM")
             c_t[3].caption("MODELO")
-            c_t[4].caption("ASESOR")
+            c_t[4].caption("ASE")
             c_t[5].caption("OK")
             
             for t in terminados:
-                r = st.columns([0.7, 0.7, 1, 2.5, 0.8, 0.5])
+                r = st.columns([0.6, 0.6, 0.8, 2.5, 0.8, 0.5])
                 fin_s = t['fin2'] if t['fin2'] else t['fin']
                 
                 r[0].write(t['ini'])
@@ -289,7 +310,7 @@ def main():
         avg = int(sum(tiempos_dia)/len(tiempos_dia)) if tiempos_dia else 0
         with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{len(terminados)}</div><div class='kpi-lbl'>Total</div></div>", unsafe_allow_html=True)
         with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{avg}'</div><div class='kpi-lbl'>Promedio</div></div>", unsafe_allow_html=True)
-        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{max(tiempos_dia) if tiempos_dia else 0}'</div><div class='kpi-lbl'>Máximo</div></div>", unsafe_allow_html=True)
+        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{max(tiempos_dia) if tiempos_dia else 0}'</div><div class='kpi-lbl'>Máx</div></div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
