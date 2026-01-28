@@ -10,7 +10,7 @@ import plotly.express as px
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (ULTRA COMPACTO RECUPERADO) ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem !important; padding-bottom: 1rem !important; }
@@ -21,19 +21,17 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
-    p { margin: 0 !important; }
+    .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
-    .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-modelo { color: #333; font-weight: 500; font-size: 12px; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
+    .badge-blue { background-color: #1976d2; color: white; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
-    .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
-    div[data-testid="column"] { padding: 0 !important; }
+    .stButton button { height: 28px !important; font-size: 12px !important; padding: 0 10px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,7 +71,8 @@ def limpiar_asesor(nombre):
     partes = nombre.split()
     return partes[1] if len(partes) > 1 and partes[0].isdigit() else partes[0]
 
-def generar_badge_alerta(hora_prometida, now_dt):
+def generar_badge_alerta(hora_prometida, now_dt, estado=""):
+    if estado == "PAUSA": return f"<div class='badge badge-blue'>{hora_prometida}<br>PAUSADO</div>"
     if not hora_prometida or ":" not in str(hora_prometida): return f"<span class='badge-normal'>{hora_prometida}</span>"
     try:
         h, m = map(int, str(hora_prometida).split(':'))
@@ -121,8 +120,10 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        # Un auto solo sale de pendientes si el estado es FINALIZADO
+        
+        # CLAVE: Un auto solo es finalizado si el estado dice FINALIZADO
         es_finalizado = (estado == "FINALIZADO")
+        
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         es_atrasado = False
         try:
@@ -142,10 +143,11 @@ def main():
         }
 
         if es_finalizado:
-            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
+            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date):
                 terminados_hoy.append(item)
         else:
-            if es_de_fecha or es_atrasado: pendientes.append(item)
+            if es_de_fecha or es_atrasado:
+                pendientes.append(item)
 
         try:
             meses_nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -157,7 +159,6 @@ def main():
     tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 KPIs", "📅 Historial"])
 
     with tab1:
-        # --- SECCIÓN PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         cols_tit_p = [0.8, 0.8, 2, 0.8, 1.4]
         tp = st.columns(cols_tit_p)
@@ -168,70 +169,64 @@ def main():
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_tit_p)
-                    badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
+                    badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt, p['est'])
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
+                    
                     with c[4]:
-    # CASO 1: No empezó (Sin hora de inicio)
-    if not p['ini']:
-        if st.button("▶️", key=f"start_{p['fila']}", type="primary", help="Iniciar Lavado"):
-            hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
-            hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO")
-            st.rerun()
+                        # FLUJO DE BOTONES CORREGIDO
+                        if not p['ini']:
+                            if st.button("▶️ Iniciar", key=f"s{p['fila']}", type="primary"):
+                                hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
+                        
+                        elif p['ini'] and not p['fin']:
+                            cb = st.columns(2)
+                            if cb[0].button("⏸️", key=f"p{p['fila']}", help="Pausar"):
+                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "PAUSA"); st.rerun()
+                            if cb[1].button("🏁", key=f"f{p['fila']}", help="Finalizar"):
+                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                        
+                        elif p['est'] == "PAUSA":
+                            if st.button("🔄 Reanudar", key=f"r{p['fila']}", type="secondary"):
+                                hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
+                        
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁 Finalizar", key=f"f2{p['fila']}", type="primary"):
+                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
 
-    # CASO 2: Está lavando (Tiene inicio pero no fin de la primera etapa)
-    elif p['ini'] and not p['fin']:
-        col_btns = st.columns(2)
-        if col_btns[0].button("⏸️", key=f"pause_{p['fila']}", help="Pausar"):
-            hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
-            hoja.update_cell(p['fila'], IDX_EST + 1, "PAUSA")
-            st.rerun()
-        if col_btns[1].button("🏁", key=f"stop_{p['fila']}", help="Finalizar"):
-            hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
-            hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
-            st.rerun()
-
-    # CASO 3: Está en Pausa (Tiene fin1 pero no inicio de repaso)
-    elif p['est'] == "PAUSA":
-        if st.button("🔄", key=f"resume_{p['fila']}", help="Reanudar Lavado"):
-            hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
-            hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO")
-            st.rerun()
-
-    # CASO 4: Está en Repaso/Reanudado (Tiene ini2 pero no fin2)
-    elif p['est'] == "REPASO":
-        if st.button("🏁", key=f"finish_final_{p['fila']}", help="Finalizar Definitivamente"):
-            hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
-            hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
-            st.rerun()
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        # --- SECCIÓN FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         cols_tit_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
         tf = st.columns(cols_tit_f)
-        tf[0].caption("INI"); tf[1].caption("FIN"); tf[2].caption("DOM"); tf[3].caption("MODELO"); tf[4].caption("ASESOR"); tf[5].caption("CONTROL CALIDAD")
+        tf[0].caption("INI"); tf[1].caption("FIN"); tf[2].caption("DOM"); tf[3].caption("MODELO"); tf[4].caption("ASESOR"); tf[5].caption("CONTROL")
         
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
             for t in terminados_hoy:
-                with st.container():
-                    r = st.columns(cols_tit_f)
-                    r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin'])
-                    r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
-                    r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
-                    r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
-                    with r[5]:
-                        c_chk, c_txt = st.columns([0.3, 0.7])
-                        with c_chk:
-                            nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
-                            if nk != t['ok']:
-                                hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
-                        with c_txt:
-                            st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
-                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+                r = st.columns(cols_tit_f)
+                r[0].write(t['ini'])
+                r[1].write(t['fin2'] if t['fin2'] else t['fin'])
+                r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
+                r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
+                r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
+                with r[5]:
+                    c_chk, c_txt = st.columns([0.3, 0.7])
+                    with c_chk:
+                        nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
+                        if nk != t['ok']:
+                            hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
+                    with c_txt:
+                        st.markdown("<span class='badge-ok'>OK</span>" if t['ok'] else "—", unsafe_allow_html=True)
+                st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab2:
         st.markdown("### KPIs del Día")
@@ -241,27 +236,17 @@ def main():
             m1.metric("Autos Lavados", len(df_dia))
             m2.metric("Tiempo Promedio (min)", f"{int(df_dia['tiempo'].mean())}")
             m3.metric("Controles OK", len(df_dia[df_dia['ok']]))
-            st.markdown("---")
-            col_chart1, col_chart2 = st.columns(2)
-            with col_chart1:
-                fig_ase = px.bar(df_dia['ase'].value_counts(), title="Lavados por Asesor", labels={'value':'Cantidad', 'index':'Asesor'})
-                st.plotly_chart(fig_ase, use_container_width=True)
-            with col_chart2:
-                fig_time = px.histogram(df_dia, x="tiempo", title="Distribución de Tiempos", labels={'tiempo':'Minutos'})
-                st.plotly_chart(fig_time, use_container_width=True)
         else:
-            st.info("Sin datos de finalizados para hoy.")
+            st.info("Sin datos para mostrar.")
 
     with tab3:
         st.markdown(f"### Histórico: {mes_historial}")
         if historico_mes:
             df_mes = pd.DataFrame(historico_mes)
-            resumen_diario = df_mes.groupby('fecha_dt').agg(Cantidad=('dom', 'count'), Promedio_Tiempo=('tiempo', 'mean')).reset_index()
-            st.dataframe(resumen_diario, use_container_width=True)
-            fig_evol = px.line(resumen_diario, x='fecha_dt', y='Cantidad', title="Evolución Diaria de Lavados", markers=True)
-            st.plotly_chart(fig_evol, use_container_width=True)
+            resumen = df_mes.groupby('fecha_dt').size().reset_index(name='Cantidad')
+            st.dataframe(resumen, use_container_width=True)
         else:
-            st.warning(f"No hay registros para {mes_historial}.")
+            st.warning("No hay registros.")
 
 if __name__ == "__main__":
     main()
