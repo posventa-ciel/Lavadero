@@ -10,7 +10,7 @@ import plotly.express as px
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (TU FORMATO ORIGINAL RECUPERADO) ---
+# --- 2. ESTILOS CSS (TU FORMATO ORIGINAL) ---
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem !important; padding-bottom: 1rem !important; }
@@ -22,14 +22,12 @@ st.markdown("""
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
     
-    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
-    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
@@ -55,12 +53,6 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def calcular_minutos(h1, h2):
-    try:
-        fmt = "%H:%M"
-        return int((datetime.strptime(h2, fmt) - datetime.strptime(h1, fmt)).total_seconds() / 60)
-    except: return 0
-
 def obtener_minutos_orden(hora_str):
     if not hora_str or ":" not in str(hora_str): return 99999
     try:
@@ -92,8 +84,6 @@ def main():
     hora_actual = now_dt.strftime("%H:%M")
     hoy_date = now_dt.date()
 
-    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
-
     hoja = conectar_sheet()
     if not hoja: return
     raw_data = hoja.get_all_values()
@@ -108,6 +98,8 @@ def main():
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
+    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
+
     pendientes, terminados_hoy = [], []
 
     for i, fila in enumerate(raw_data[1:], start=2):
@@ -121,33 +113,41 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Lógica de finalizado
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
-        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
+        # Un auto está finalizado si tiene hora en FIN1 o FIN2 o el estado es FINALIZADO
+        tiene_fin = (fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
+        es_finalizado = (estado == "FINALIZADO" or tiene_fin)
         
-        es_atrasado = False
-        if not es_finalizado:
+        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
+        
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
+        if es_finalizado:
+            # Si se terminó, aparece en la lista si su TURNO era de la fecha seleccionada
+            # O si el auto AG99SJ (atrasado) se terminó hoy, forzamos que aparezca hoy
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and tiene_fin and not es_de_fecha_seleccionada):
+                item = {
+                    "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
+                    "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
+                    "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
+                    "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": False,
+                    "min_orden": obtener_minutos_orden(fila[IDX_PRO])
+                }
+                terminados_hoy.append(item)
+        else:
+            # Si no está terminado, aparece si es de la fecha o si está atrasado
+            es_atrasado = False
             try:
                 f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
-        item = {
-            "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
-            "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
-            "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-            "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
-            "min_orden": obtener_minutos_orden(fila[IDX_PRO])
-        }
-
-        # --- CAMBIO SOLICITADO AQUÍ ---
-        if es_finalizado:
-            # Si está finalizado y pertenece a la fecha seleccionada, va a terminados
-            if es_de_fecha:
-                terminados_hoy.append(item)
-        else:
-            # Si NO está finalizado, aparece si es de hoy o si es un atrasado
-            if es_de_fecha or es_atrasado:
+            if es_de_fecha_seleccionada or es_atrasado:
+                item = {
+                    "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
+                    "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
+                    "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
+                    "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
+                    "min_orden": obtener_minutos_orden(fila[IDX_PRO])
+                }
                 pendientes.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
@@ -184,10 +184,10 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>")
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
-            terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
+            terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['fin'] if x['fin'] else x['pro']))
             cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
             h = st.columns(cols_f)
             h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL CALIDAD")
@@ -207,9 +207,6 @@ def main():
                         with c_txt:
                             st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
-
-    with tab2:
-        st.write("Aquí puedes volver a incluir tus gráficos de Plotly si los tenías configurados.")
 
 if __name__ == "__main__":
     main()
