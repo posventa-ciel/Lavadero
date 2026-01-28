@@ -21,21 +21,16 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    
-    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
-    
-    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
-
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -121,7 +116,6 @@ def main():
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
-        
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
@@ -129,14 +123,12 @@ def main():
         estado = fila[IDX_EST].strip().upper()
         es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
-        
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
             if f_dt < fecha_sel: es_atrasado = True
         except: pass
 
-        # Calculo de minutos totales (Suma ambos tramos si existen)
         minutos_lavado = calcular_minutos_totales(fila[IDX_INI1], fila[IDX_FIN1], fila[IDX_INI2], fila[IDX_FIN2])
 
         item = {
@@ -148,15 +140,12 @@ def main():
             "fecha_dt": f_celda.split()[0]
         }
 
-        # Clasificación Operación
         if es_finalizado:
             if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            if es_de_fecha or es_atrasado:
-                pendientes.append(item)
+            if es_de_fecha or es_atrasado: pendientes.append(item)
 
-        # Clasificación Historial (Filtro Mes)
         try:
             meses_nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
             f_dt_obj = datetime.strptime(item["fecha_dt"], "%d/%m/%Y")
@@ -167,13 +156,17 @@ def main():
     tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 KPIs", "📅 Historial"])
 
     with tab1:
+        # --- SECCIÓN PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
+        cols_tit_p = [0.8, 0.8, 2, 0.8, 1.4]
+        tp = st.columns(cols_tit_p)
+        tp[0].caption("PROMETIDO"); tp[1].caption("DOMINIO"); tp[2].caption("MODELO"); tp[3].caption("ASESOR"); tp[4].caption("ACCIONES")
+        
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
-            cols_p = [0.8, 0.8, 2, 0.8, 1.4]
             for p in pendientes:
                 with st.container():
-                    c = st.columns(cols_p)
+                    c = st.columns(cols_tit_p)
                     badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
@@ -203,15 +196,17 @@ def main():
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
+        # --- SECCIÓN FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
+        cols_tit_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
+        tf = st.columns(cols_tit_f)
+        tf[0].caption("INI"); tf[1].caption("FIN"); tf[2].caption("DOM"); tf[3].caption("MODELO"); tf[4].caption("ASESOR"); tf[5].caption("CONTROL CALIDAD")
+        
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
-            cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
-            h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL CALIDAD")
             for t in terminados_hoy:
                 with st.container():
-                    r = st.columns(cols_f)
+                    r = st.columns(cols_tit_f)
                     r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin'])
                     r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
                     r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
@@ -234,7 +229,6 @@ def main():
             m1.metric("Autos Lavados", len(df_dia))
             m2.metric("Tiempo Promedio (min)", f"{int(df_dia['tiempo'].mean())}")
             m3.metric("Controles OK", len(df_dia[df_dia['ok']]))
-            
             st.markdown("---")
             col_chart1, col_chart2 = st.columns(2)
             with col_chart1:
@@ -244,23 +238,18 @@ def main():
                 fig_time = px.histogram(df_dia, x="tiempo", title="Distribución de Tiempos", labels={'tiempo':'Minutos'})
                 st.plotly_chart(fig_time, use_container_width=True)
         else:
-            st.info("No hay datos de finalizados para el día seleccionado.")
+            st.info("Sin datos de finalizados para hoy.")
 
     with tab3:
         st.markdown(f"### Histórico: {mes_historial}")
         if historico_mes:
             df_mes = pd.DataFrame(historico_mes)
-            resumen_diario = df_mes.groupby('fecha_dt').agg(
-                Cantidad=('dom', 'count'),
-                Promedio_Tiempo=('tiempo', 'mean')
-            ).reset_index()
-            
+            resumen_diario = df_mes.groupby('fecha_dt').agg(Cantidad=('dom', 'count'), Promedio_Tiempo=('tiempo', 'mean')).reset_index()
             st.dataframe(resumen_diario, use_container_width=True)
-            
             fig_evol = px.line(resumen_diario, x='fecha_dt', y='Cantidad', title="Evolución Diaria de Lavados", markers=True)
             st.plotly_chart(fig_evol, use_container_width=True)
         else:
-            st.warning(f"No hay registros para el mes de {mes_historial}.")
+            st.warning(f"No hay registros para {mes_historial}.")
 
 if __name__ == "__main__":
     main()
