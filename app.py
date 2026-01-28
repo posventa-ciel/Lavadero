@@ -21,16 +21,21 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
+    
+    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
+    
+    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
+
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -97,7 +102,7 @@ def main():
 
     with st.sidebar:
         st.markdown("### 🔍 Buscar Patente")
-        busqueda = st.text_input("", placeholder="Ej: AB123CD", key="search_input", label_visibility="collapsed").upper()
+        busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
         st.markdown("---")
         fecha_sel = st.date_input("Ver fecha:", hoy_date)
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
@@ -109,18 +114,18 @@ def main():
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
+        
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- CORRECCIÓN AQUÍ ---
-        # Solo se considera finalizado si el estado es FINALIZADO. 
-        # La pausa escribe en FIN1, pero mantiene el estado PAUSA, así se queda en pendientes.
-        es_finalizado = (estado == "FINALIZADO")
-        
+        # Un auto está finalizado si el estado dice FINALIZADO o tiene marcas de fin
+        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
+        
+        # Detectar atraso
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -135,10 +140,13 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
         if es_finalizado:
-            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date):
+            # Si estoy viendo hoy, incluyo los de fecha hoy O los que estaban atrasados pero se terminaron
+            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
+            # En pendientes va lo de hoy o lo que viene atrasado y sigue sin terminarse
             if es_de_fecha or es_atrasado:
                 pendientes.append(item)
 
@@ -175,7 +183,7 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
                         elif p['est'] == "REPASO":
-                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar"):
+                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
@@ -186,7 +194,7 @@ def main():
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
             cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
             h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL")
+            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL CALIDAD")
             for t in terminados_hoy:
                 with st.container():
                     r = st.columns(cols_f)
@@ -201,7 +209,7 @@ def main():
                             if nk != t['ok']:
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
                         with c_txt:
-                            st.markdown("<span class='badge-ok'>OK</span>" if t['ok'] else "—", unsafe_allow_html=True)
+                            st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
