@@ -10,53 +10,70 @@ import plotly.express as px
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS CSS (Diseño Limpio) ---
+# --- LOGO SVG (El León de Peugeot simplificado, Código Puro) ---
+LOGO_SVG = """
+<svg version="1.1" width="50" height="50" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <path fill="#ffffff" d="M50,10 C20,10 10,30 10,50 C10,70 20,90 50,90 C80,90 90,70 90,50 C90,30 80,10 50,10 Z" />
+  <path fill="#00235d" d="M50,15 C75,15 85,35 85,50 C85,65 75,85 50,85 C25,85 15,65 15,50 C15,35 25,15 50,15 Z M50,30 L40,50 L60,50 L50,30 M45,55 L45,70 M55,55 L55,70" />
+</svg>
+"""
+
+# --- ESTILOS CSS (MODO COMPACTO) ---
 st.markdown("""
 <style>
-    /* Ajuste superior */
+    /* 1. Pegar al techo */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 1rem !important;
     }
     
-    /* FONDO AZUL DEL ENCABEZADO */
-    .header-box {
-        background: linear-gradient(90deg, #00235d 0%, #004080 100%);
-        padding: 15px;
+    /* 2. Header Unificado (Fondo Azul Completo) */
+    .header-unified {
+        background: linear-gradient(90deg, #00235d 0%, #001538 100%);
+        padding: 15px 20px;
         border-radius: 8px;
         color: white;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.15);
     }
     
-    /* TARJETAS DE FILAS (Compactas) */
-    .row-card {
-        background-color: white;
-        border-bottom: 1px solid #e0e0e0;
-        padding: 4px 8px !important;
-        min-height: 35px !important;
+    /* 3. Filas Ultra-Compactas (Estilo Tabla) */
+    .row-compact {
+        border-bottom: 1px solid #e6e6e6;
+        padding: 4px 0 !important;
+        margin: 0 !important;
         display: flex;
         align-items: center;
+        height: 38px; /* Altura forzada */
     }
     
-    /* TEXTOS */
-    p { margin: 0 !important; }
-    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 13px; }
-    .txt-patente { color: #00235d; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #444; font-size: 12px; font-weight: 500; }
-    .txt-asesor { color: #666; font-size: 11px; font-style: italic; }
+    /* 4. Tipografía Ajustada */
+    .cell-text { font-size: 13px; margin: 0; line-height: 1.2; }
+    .txt-hora { color: #d32f2f; font-weight: 700; font-size: 14px; }
+    .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
+    .txt-modelo { color: #333; font-weight: 500; font-size: 12px; }
+    .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
-    /* BOTONES */
+    /* 5. Botones Slim */
     .stButton button {
         height: 26px !important;
+        min-height: 26px !important;
         font-size: 11px !important;
-        padding: 0px 10px !important;
-        margin-top: 2px !important;
-        border: none;
+        padding: 0 10px !important;
+        margin: 0 !important;
+        line-height: 1 !important;
     }
     
-    /* Quitar espacios extra */
-    div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
+    /* 6. Eliminar espacios verticales nativos de Streamlit */
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0rem !important;
+    }
+    div[data-testid="column"] {
+        padding: 0 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,36 +127,22 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- ENCABEZADO "NATIVO" (MÁS SEGURO QUE HTML PURO) ---
-    # Usamos un contenedor con la clase CSS 'header-box' que definimos arriba
-    with st.container():
-        st.markdown('<div class="header-box">', unsafe_allow_html=True)
-        c_logo, c_titulo, c_fecha = st.columns([0.5, 3, 1])
-        
-        with c_logo:
-            # Logo SVG simple
-            st.markdown("""
-            <svg width="40" height="40" viewBox="0 0 50 50">
-              <rect x="0" y="0" width="50" height="50" rx="8" fill="white"/>
-              <path d="M10 25 L20 25 L20 40" stroke="#00235d" stroke-width="4" fill="none"/>
-              <path d="M10 10 L40 10 L40 25 L10 25" stroke="#00235d" stroke-width="4" fill="none"/>
-            </svg>
-            """, unsafe_allow_html=True)
-            
-        with c_titulo:
-            st.markdown("""
-            <h2 style='margin:0; font-size:24px; color:white;'>CONTROL LAVADERO</h2>
-            <p style='margin:0; font-size:14px; opacity:0.8; color:white;'>Gestión Operativa Postventa</p>
-            """, unsafe_allow_html=True)
-            
-        with c_fecha:
-            st.markdown(f"""
-            <div style='text-align:right; color:white;'>
-                <div style='font-weight:bold; font-size:16px;'>{hoy_date.strftime("%d/%m/%Y")}</div>
-                <div style='font-size:13px;'>{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
+    # --- HEADER UNIFICADO (HTML PURO - INDESTRUCTIBLE) ---
+    st.markdown(f"""
+    <div class="header-unified">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            {LOGO_SVG}
+            <div style="line-height: 1.1;">
+                <div style="font-size: 22px; font-weight: bold; letter-spacing: 0.5px;">CONTROL LAVADERO</div>
+                <div style="font-size: 12px; opacity: 0.8; font-weight: 300;">GESTIÓN OPERATIVA POSTVENTA</div>
             </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 16px; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
+            <div style="font-size: 14px; opacity: 0.9;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
@@ -159,8 +162,8 @@ def main():
     IDX_CONTROL = 13 
 
     with st.sidebar:
-        st.markdown("### Filtros")
-        fecha_sel = st.date_input("Fecha:", hoy_date)
+        st.markdown("**Filtros**")
+        fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
@@ -224,13 +227,13 @@ def main():
     tab_op, tab_hoy, tab_hist = st.tabs(["🚗 Operación", "📊 Métricas", "📈 Histórico"])
 
     with tab_op:
-        # PENDIENTES
+        # --- PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
             # CABECERA
-            h1, h2, h3, h4, h5 = st.columns([0.6, 0.8, 2, 0.8, 1.5])
+            h1, h2, h3, h4, h5 = st.columns([0.6, 0.8, 2, 0.8, 1.4])
             h1.caption("HORA")
             h2.caption("PATENTE")
             h3.caption("MODELO")
@@ -239,8 +242,9 @@ def main():
             
             for p in pendientes:
                 with st.container():
-                    st.markdown('<div class="row-card">', unsafe_allow_html=True)
-                    col = st.columns([0.6, 0.8, 2, 0.8, 1.5])
+                    # USO DE COLUMNAS ESTÁNDAR PERO CON CSS 'compact-row'
+                    col = st.columns([0.6, 0.8, 2, 0.8, 1.4])
+                    
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
@@ -273,13 +277,15 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Línea separadora manual HTML para evitar el padding de 'st.divider'
+                    st.markdown("<div style='border-bottom:1px solid #eee; margin: 0px 0 3px 0;'></div>", unsafe_allow_html=True)
         else:
             st.info("Sin pendientes.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # FINALIZADOS
+        # --- FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
@@ -293,20 +299,19 @@ def main():
             
             for t in terminados_hoy:
                  with st.container():
-                     st.markdown('<div class="row-card">', unsafe_allow_html=True)
                      r = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
                      fin_s = t['fin2'] if t['fin2'] else t['fin']
-                     r[0].write(t['ini'])
-                     r[1].write(fin_s)
-                     r[2].markdown(f"**{t['dom']}**")
-                     r[3].markdown(f"<span style='font-size:12px'>{t['mod']}</span>", unsafe_allow_html=True)
-                     r[4].write(t['ase'])
+                     r[0].markdown(f"<span class='cell-text'>{t['ini']}</span>", unsafe_allow_html=True)
+                     r[1].markdown(f"<span class='cell-text'>{fin_s}</span>", unsafe_allow_html=True)
+                     r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
+                     r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
+                     r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
                      with r[5]:
                         nk = st.checkbox("", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
                         if nk != t['ok']:
                             hoja.update_cell(t['fila'], IDX_CONTROL + 1, "OK" if nk else "")
                             st.rerun()
-                     st.markdown('</div>', unsafe_allow_html=True)
+                     st.markdown("<div style='border-bottom:1px solid #eee; margin: 0px 0 3px 0;'></div>", unsafe_allow_html=True)
 
     with tab_hoy:
         avg_hoy = int(sum(tiempos_hoy)/len(tiempos_hoy)) if tiempos_hoy else 0
@@ -318,7 +323,7 @@ def main():
         st.divider()
         if tiempos_hoy:
             fig = px.histogram(x=tiempos_hoy, nbins=10, labels={'x':'Minutos', 'y':'Autos'}, title="Distribución de Tiempos", color_discrete_sequence=['#00235d'])
-            fig.update_layout(height=300, margin=dict(l=20, r=20, t=30, b=20))
+            fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_hist:
