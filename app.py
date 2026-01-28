@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import pytz
 import plotly.express as px
@@ -13,7 +13,6 @@ st.set_page_config(page_title="Programación Lavadero", layout="wide")
 # --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
-    /* Ajuste superior */
     .block-container {
         padding-top: 3rem !important;
         padding-bottom: 2rem !important;
@@ -32,39 +31,47 @@ st.markdown("""
         margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    
     .header-title {
-        font-size: 26px; 
-        font-weight: bold; 
-        letter-spacing: 1px; 
-        text-transform: uppercase;
-        margin: 0;
-        line-height: 1.2;
+        font-size: 26px; font-weight: bold; letter-spacing: 1px; 
+        text-transform: uppercase; margin: 0; line-height: 1.2;
     }
 
     /* Filas compactas */
     .compact-row {
         border-bottom: 1px solid #e0e0e0;
-        padding: 3px 0 !important;
+        padding: 4px 0 !important;
         margin: 0 !important;
         line-height: 1 !important;
+        display: flex;
+        align-items: center;
     }
     
-    /* Tipografía */
+    /* Estilos de Texto */
     p { margin: 0 !important; }
-    .txt-hora { color: #d32f2f; font-weight: 700; font-size: 14px; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
+    /* BADGES DE ALERTA (NUEVO) */
+    .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 12px;
+        display: inline-block;
+        text-align: center;
+        min-width: 70px;
+    }
+    .badge-red { background-color: #d32f2f; color: white; }
+    .badge-yellow { background-color: #fbc02d; color: black; }
+    .badge-normal { color: #333; font-weight: bold; }
+    .badge-ok { color: #2e7d32; font-weight: bold; }
+
     /* Botones */
     .stButton button {
-        height: 24px !important;
-        min-height: 24px !important;
-        font-size: 11px !important;
-        padding: 0 10px !important;
-        margin: 2px 0 !important;
-        line-height: 1 !important;
+        height: 24px !important; min-height: 24px !important;
+        font-size: 11px !important; padding: 0 10px !important;
+        margin: 2px 0 !important; line-height: 1 !important;
     }
     
     /* Ajustes generales */
@@ -123,11 +130,38 @@ def limpiar_asesor(nombre_completo):
         return partes[1]
     return partes[0]
 
+# --- NUEVA FUNCIÓN DE ALERTAS ---
+def generar_badge_alerta(hora_prometida, hora_actual_dt):
+    """Devuelve el HTML del badge según la urgencia."""
+    if not hora_prometida or ":" not in hora_prometida:
+        return f"<span class='badge-normal'>{hora_prometida}</span>"
+    
+    try:
+        h, m = map(int, hora_prometida.split(':'))
+        # Creamos fecha completa para comparar con hora actual
+        prometida_dt = hora_actual_dt.replace(hour=h, minute=m, second=0, microsecond=0)
+        
+        # Diferencia en minutos
+        diff = (prometida_dt - hora_actual_dt).total_seconds() / 60
+        
+        # LÓGICA DE COLORES
+        if diff < 0: # Ya pasó la hora
+            return f"<div class='badge badge-red'>{hora_prometida}<br><small>DEMORADO</small></div>"
+        elif diff <= 30: # Faltan 30 mins o menos
+            return f"<div class='badge badge-red'>{hora_prometida}<br><small>YA!</small></div>"
+        elif diff <= 60: # Faltan 60 mins o menos
+            return f"<div class='badge badge-yellow'>{hora_prometida}<br><small>ATENCIÓN</small></div>"
+        else: # Falta mucho
+            return f"<span class='badge-normal'>{hora_prometida}</span>"
+    except:
+        return f"<span class='badge-normal'>{hora_prometida}</span>"
+
 # --- 5. FUNCIÓN PRINCIPAL ---
 def main():
     tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
-    hora_actual = datetime.now(tz_ar).strftime("%H:%M")
-    hoy_date = datetime.now(tz_ar).date()
+    now_dt = datetime.now(tz_ar)
+    hora_actual = now_dt.strftime("%H:%M")
+    hoy_date = now_dt.date()
 
     # --- ENCABEZADO ---
     st.markdown(f"""
@@ -135,7 +169,7 @@ def main():
         <div class="header-title">PROGRAMACIÓN DEL LAVADERO</div>
         <div style="text-align: right; min-width: 100px;">
             <div style="font-size: 18px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div>
-            <div style="font-size: 14px; opacity: 0.85;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
+            <div style="font-size: 14px; opacity: 0.85;">{hora_actual} hs</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -222,12 +256,14 @@ def main():
     tab_op, tab_hoy, tab_hist = st.tabs(["🚗 Operación", "📊 Métricas", "📈 Histórico"])
 
     with tab_op:
-        # PENDIENTES
+        # --- PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            h1, h2, h3, h4, h5 = st.columns([0.6, 0.8, 2, 0.8, 1.4])
+            # Anchos ajustados para que entre bien la alerta
+            cols_pend = [0.8, 0.8, 2, 0.8, 1.4] 
+            h1, h2, h3, h4, h5 = st.columns(cols_pend)
             h1.caption("HORA")
             h2.caption("PATENTE")
             h3.caption("MODELO")
@@ -236,9 +272,16 @@ def main():
             
             for p in pendientes:
                 with st.container():
-                    col = st.columns([0.6, 0.8, 2, 0.8, 1.4])
-                    hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
-                    col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
+                    col = st.columns(cols_pend)
+                    
+                    # 1. ALERTA DE TIEMPO (NUEVO)
+                    # Si está atrasado (fecha vieja) fuerza rojo, sino calcula
+                    if p['atr']:
+                        html_alerta = f"<div class='badge badge-red'>{p['pro']}<br><small>ATRASADO</small></div>"
+                    else:
+                        html_alerta = generar_badge_alerta(p['pro'], now_dt)
+                    
+                    col[0].markdown(html_alerta, unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
                     col[2].markdown(f"<span class='txt-modelo' title='{p['mod']}'>{p['mod']}</span>", unsafe_allow_html=True)
                     col[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
@@ -276,39 +319,54 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # FINALIZADOS
+        # --- FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
             
-            # --- TÍTULOS DE FINALIZADOS MODIFICADOS ---
-            # Ajuste de anchos para que entre "CONTROL DE CALIDAD"
-            # Antes: [0.6, 0.6, 0.8, 2, 0.8, 0.5]
-            # Ahora: Le quitamos un poco a MODELO (2 -> 1.5) y se lo damos al final
             columnas_final = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
-            
             t1, t2, t3, t4, t5, t6 = st.columns(columnas_final)
             t1.caption("INI")
             t2.caption("FIN")
             t3.caption("DOM")
             t4.caption("MODELO")
-            t5.caption("ASESOR")            # CAMBIO SOLICITADO
-            t6.caption("CONTROL DE CALIDAD") # CAMBIO SOLICITADO
+            t5.caption("ASESOR")
+            t6.caption("CONTROL DE CALIDAD")
             
             for t in terminados_hoy:
                  with st.container():
                      r = st.columns(columnas_final)
                      fin_s = t['fin2'] if t['fin2'] else t['fin']
+                     
+                     # Visualización básica
                      r[0].write(t['ini'])
                      r[1].write(fin_s)
                      r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
                      r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
                      r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
+                     
+                     # COLUMNA CONTROL DE CALIDAD + ALERTA
                      with r[5]:
-                        nk = st.checkbox("", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
+                        c_chk, c_txt = st.columns([0.3, 0.7])
+                        with c_chk:
+                            nk = st.checkbox("", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
+                        
+                        # LOGICA DE ALERTA EN CONTROL:
+                        # Si ya tiene OK -> Texto Verde "LISTO"
+                        # Si NO tiene OK -> Calculamos semáforo respecto a hora prometida
+                        with c_txt:
+                            if nk:
+                                st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            else:
+                                # Usamos la misma lógica: si está finalizado pero no chequeado
+                                # y la hora prometida ya pasó, avisa fuerte.
+                                html_alerta_ctrl = generar_badge_alerta(t['pro'], now_dt)
+                                st.markdown(html_alerta_ctrl, unsafe_allow_html=True)
+
                         if nk != t['ok']:
                             hoja.update_cell(t['fila'], IDX_CONTROL + 1, "OK" if nk else "")
                             st.rerun()
+                            
                      st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab_hoy:
