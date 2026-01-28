@@ -105,8 +105,7 @@ def main():
         busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
         st.markdown("---")
         fecha_sel = st.date_input("Ver fecha:", hoy_date)
-        f_str = fecha_sel.strftime("%-d/%-m/%Y")
-        f_str_cero = fecha_sel.strftime("%d/%m/%Y")
+        f_str, f_str_cero = fecha_sel.strftime("%-d/%-m/%Y"), fecha_sel.strftime("%d/%m/%Y")
         st.markdown("---")
         mes_historial = st.selectbox("Mes Historial:", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=hoy_date.month-1)
 
@@ -115,14 +114,14 @@ def main():
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         dom = fila[IDX_DOM].upper()
-        pro_raw = fila[IDX_PRO].upper()
-        if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
+        if not dom or any(x in fila[IDX_PRO].upper() for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
+        
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -136,8 +135,7 @@ def main():
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
             "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
-            "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "tiempo": minutos_lavado,
-            "fecha_dt": f_celda.split()[0]
+            "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "tiempo": minutos_lavado, "fecha_dt": f_celda.split()[0]
         }
 
         if es_finalizado:
@@ -149,24 +147,23 @@ def main():
         try:
             meses_nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
             f_dt_obj = datetime.strptime(item["fecha_dt"], "%d/%m/%Y")
-            if meses_nombres[f_dt_obj.month-1] == mes_historial and f_dt_obj.year == hoy_date.year:
-                if es_finalizado: historico_mes.append(item)
+            if meses_nombres[f_dt_obj.month-1] == mes_historial and f_dt_obj.year == hoy_date.year and es_finalizado:
+                historico_mes.append(item)
         except: pass
 
     tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 KPIs", "📅 Historial"])
 
     with tab1:
-        # --- SECCIÓN PENDIENTES ---
         st.markdown(f"**Pendientes ({len(pendientes)})**")
-        cols_tit_p = [0.8, 0.8, 2, 0.8, 1.4]
-        tp = st.columns(cols_tit_p)
-        tp[0].caption("PROMETIDO"); tp[1].caption("DOMINIO"); tp[2].caption("MODELO"); tp[3].caption("ASESOR"); tp[4].caption("ACCIONES")
+        cols_tit = [0.8, 0.8, 2, 0.8, 1.4]
+        h_col = st.columns(cols_tit)
+        h_col[0].caption("PROMETIDO"); h_col[1].caption("DOMINIO"); h_col[2].caption("MODELO"); h_col[3].caption("ASESOR"); h_col[4].caption("ACCIONES")
         
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             for p in pendientes:
                 with st.container():
-                    c = st.columns(cols_tit_p)
+                    c = st.columns(cols_tit)
                     badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
@@ -196,11 +193,10 @@ def main():
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        # --- SECCIÓN FINALIZADOS ---
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         cols_tit_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
-        tf = st.columns(cols_tit_f)
-        tf[0].caption("INI"); tf[1].caption("FIN"); tf[2].caption("DOM"); tf[3].caption("MODELO"); tf[4].caption("ASESOR"); tf[5].caption("CONTROL CALIDAD")
+        hf = st.columns(cols_tit_f)
+        hf[0].caption("INI"); hf[1].caption("FIN"); hf[2].caption("DOM"); hf[3].caption("MODELO"); hf[4].caption("ASESOR"); hf[5].caption("CONTROL")
         
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
@@ -230,26 +226,17 @@ def main():
             m2.metric("Tiempo Promedio (min)", f"{int(df_dia['tiempo'].mean())}")
             m3.metric("Controles OK", len(df_dia[df_dia['ok']]))
             st.markdown("---")
-            col_chart1, col_chart2 = st.columns(2)
-            with col_chart1:
-                fig_ase = px.bar(df_dia['ase'].value_counts(), title="Lavados por Asesor", labels={'value':'Cantidad', 'index':'Asesor'})
-                st.plotly_chart(fig_ase, use_container_width=True)
-            with col_chart2:
-                fig_time = px.histogram(df_dia, x="tiempo", title="Distribución de Tiempos", labels={'tiempo':'Minutos'})
-                st.plotly_chart(fig_time, use_container_width=True)
-        else:
-            st.info("Sin datos de finalizados para hoy.")
+            c1, c2 = st.columns(2)
+            with c1: st.plotly_chart(px.bar(df_dia['ase'].value_counts(), title="Lavados por Asesor"), use_container_width=True)
+            with c2: st.plotly_chart(px.histogram(df_dia, x="tiempo", title="Distribución de Tiempos"), use_container_width=True)
 
     with tab3:
         st.markdown(f"### Histórico: {mes_historial}")
         if historico_mes:
             df_mes = pd.DataFrame(historico_mes)
-            resumen_diario = df_mes.groupby('fecha_dt').agg(Cantidad=('dom', 'count'), Promedio_Tiempo=('tiempo', 'mean')).reset_index()
-            st.dataframe(resumen_diario, use_container_width=True)
-            fig_evol = px.line(resumen_diario, x='fecha_dt', y='Cantidad', title="Evolución Diaria de Lavados", markers=True)
-            st.plotly_chart(fig_evol, use_container_width=True)
-        else:
-            st.warning(f"No hay registros para {mes_historial}.")
+            resumen = df_mes.groupby('fecha_dt').agg(Cantidad=('dom', 'count'), Promedio_Min=('tiempo', 'mean')).reset_index()
+            st.dataframe(resumen, use_container_width=True)
+            st.plotly_chart(px.line(resumen, x='fecha_dt', y='Cantidad', title="Evolución Diaria", markers=True), use_container_width=True)
+        else: st.warning(f"No hay registros para {mes_historial}.")
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
