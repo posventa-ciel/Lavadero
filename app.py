@@ -7,19 +7,19 @@ import json
 import pytz
 import plotly.express as px
 
-# --- 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE PRIMERO) ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (MODO SIN IMAGEN) ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
-    /* CORRECCIÓN DEL TÍTULO CORTADO: Bajamos todo el contenido */
+    /* Ajuste superior */
     .block-container {
-        padding-top: 3rem !important; /* Aumentado para asegurar que se vea bien */
+        padding-top: 3rem !important;
         padding-bottom: 2rem !important;
     }
     
-    /* Caja del Encabezado Azul */
+    /* Encabezado */
     .header-box {
         background: linear-gradient(90deg, #00235d 0%, #001538 100%);
         padding: 20px;
@@ -33,7 +33,6 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* Estilo del Texto del Título */
     .header-title {
         font-size: 26px; 
         font-weight: bold; 
@@ -51,14 +50,14 @@ st.markdown("""
         line-height: 1 !important;
     }
     
-    /* Tipografía General */
+    /* Tipografía */
     p { margin: 0 !important; }
     .txt-hora { color: #d32f2f; font-weight: 700; font-size: 14px; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
-    /* Botones Slim */
+    /* Botones */
     .stButton button {
         height: 24px !important;
         min-height: 24px !important;
@@ -68,11 +67,10 @@ st.markdown("""
         line-height: 1 !important;
     }
     
-    /* Eliminar huecos extra */
+    /* Ajustes generales */
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
 
-    /* Responsividad */
     @media (max-width: 600px) {
         .header-box { flex-direction: column; align-items: flex-start; gap: 10px; }
         .header-title { font-size: 20px; }
@@ -84,7 +82,6 @@ st.markdown("""
 def conectar_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # Ajusta esto si usas st.secrets o archivo json local
         key_dict = json.loads(st.secrets["service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         client = gspread.authorize(creds)
@@ -132,12 +129,10 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- HTML DEL ENCABEZADO (SIN IMAGEN) ---
+    # --- ENCABEZADO ---
     st.markdown(f"""
     <div class="header-box">
-        <div class="header-title">
-            PROGRAMACIÓN DEL LAVADERO
-        </div>
+        <div class="header-title">PROGRAMACIÓN DEL LAVADERO</div>
         <div style="text-align: right; min-width: 100px;">
             <div style="font-size: 18px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div>
             <div style="font-size: 14px; opacity: 0.85;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
@@ -232,7 +227,6 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            # Encabezados
             h1, h2, h3, h4, h5 = st.columns([0.6, 0.8, 2, 0.8, 1.4])
             h1.caption("HORA")
             h2.caption("PATENTE")
@@ -286,17 +280,24 @@ def main():
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
-            t1, t2, t3, t4, t5, t6 = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
+            
+            # --- TÍTULOS DE FINALIZADOS MODIFICADOS ---
+            # Ajuste de anchos para que entre "CONTROL DE CALIDAD"
+            # Antes: [0.6, 0.6, 0.8, 2, 0.8, 0.5]
+            # Ahora: Le quitamos un poco a MODELO (2 -> 1.5) y se lo damos al final
+            columnas_final = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
+            
+            t1, t2, t3, t4, t5, t6 = st.columns(columnas_final)
             t1.caption("INI")
             t2.caption("FIN")
             t3.caption("DOM")
             t4.caption("MODELO")
-            t5.caption("ASE")
-            t6.caption("OK")
+            t5.caption("ASESOR")            # CAMBIO SOLICITADO
+            t6.caption("CONTROL DE CALIDAD") # CAMBIO SOLICITADO
             
             for t in terminados_hoy:
                  with st.container():
-                     r = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
+                     r = st.columns(columnas_final)
                      fin_s = t['fin2'] if t['fin2'] else t['fin']
                      r[0].write(t['ini'])
                      r[1].write(fin_s)
