@@ -10,7 +10,7 @@ import plotly.express as px
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS CSS (MODO COMPACTO DE ALTA DENSIDAD) ---
+# --- ESTILOS CSS (MODO COMPACTO - APROBADO) ---
 st.markdown("""
 <style>
     /* 1. Ajuste del techo */
@@ -33,10 +33,10 @@ st.markdown("""
         height: 70px;
     }
     
-    /* 3. FILAS ULTRA COMPACTAS (La clave del espacio) */
+    /* 3. FILAS ULTRA COMPACTAS */
     .compact-row {
         border-bottom: 1px solid #e0e0e0;
-        padding: 3px 0 !important; /* Mínimo padding vertical */
+        padding: 3px 0 !important;
         margin: 0 !important;
         line-height: 1 !important;
     }
@@ -118,14 +118,14 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- ENCABEZADO CON IMAGEN ONLINE ---
-    # Usamos el logo oficial de Wikimedia. Si no carga, mostrará un texto alternativo.
+    # --- ENCABEZADO CORREGIDO ---
+    # Nota: Agregué background: white al logo para asegurar contraste
     st.markdown(f"""
     <div class="header-box">
         <div style="display: flex; align-items: center; gap: 15px;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="50" alt="PEUGEOT">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" width="45" style="background: white; border-radius: 50%; padding: 2px;" alt="PEUGEOT">
             <div style="line-height: 1.1;">
-                <div style="font-size: 22px; font-weight: bold; letter-spacing: 0.5px;">CONTROL LAVADERO</div>
+                <div style="font-size: 20px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;">PROGRAMACIÓN DEL LAVADERO</div>
                 <div style="font-size: 12px; opacity: 0.8;">GESTIÓN OPERATIVA POSTVENTA</div>
             </div>
         </div>
@@ -223,7 +223,7 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            # CABECERA
+            # Encabezados
             h1, h2, h3, h4, h5 = st.columns([0.6, 0.8, 2, 0.8, 1.4])
             h1.caption("HORA")
             h2.caption("PATENTE")
@@ -233,11 +233,7 @@ def main():
             
             for p in pendientes:
                 with st.container():
-                    # Usamos st.columns dentro del contenedor, pero el CSS 'compact-row' quitará el espacio.
-                    # NOTA: Para aplicar el borde inferior, usamos un div HTML vacío al final.
-                    
                     col = st.columns([0.6, 0.8, 2, 0.8, 1.4])
-                    
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
@@ -271,7 +267,6 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
                     
-                    # Esta línea es la que crea la separación fina y compacta
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
         else:
             st.info("Sin pendientes.")
