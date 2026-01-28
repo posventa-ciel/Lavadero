@@ -167,10 +167,13 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
+                        # --- ESTADO: INICIAL (Botón Play) ---
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
+                        
+                        # --- ESTADO: EN LAVADO (Botones Pausa o Fin) ---
                         elif p['ini'] and not p['fin']:
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -179,11 +182,18 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                        
+                        # --- ESTADO: PAUSA (Botón Repaso/Reanudar) ---
                         elif p['est'] == "PAUSA":
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
-                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+                        
+                        # --- ESTADO: REPASO (Botón Finalizar Segundo Tiempo) ---
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
+                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
         
