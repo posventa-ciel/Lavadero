@@ -10,51 +10,37 @@ import plotly.express as px
 # --- 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE PRIMERO) ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (CORREGIDO PARA LOGO Y TÍTULO) ---
+# --- 2. ESTILOS CSS (MODO SIN IMAGEN) ---
 st.markdown("""
 <style>
-    /* Ajuste del techo para que no se corte el título */
+    /* CORRECCIÓN DEL TÍTULO CORTADO: Bajamos todo el contenido */
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 3rem !important; /* Aumentado para asegurar que se vea bien */
         padding-bottom: 2rem !important;
     }
     
-    /* Caja del Encabezado: Flexible y sin altura fija */
+    /* Caja del Encabezado Azul */
     .header-box {
         background: linear-gradient(90deg, #00235d 0%, #001538 100%);
-        padding: 15px 20px;
+        padding: 20px;
         border-radius: 8px;
         color: white;
         display: flex;
-        flex-direction: row; /* Elementos lado a lado */
+        flex-direction: row;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        min-height: 80px; /* Altura mínima para asegurar espacio */
     }
     
-    /* Estilo del Título */
+    /* Estilo del Texto del Título */
     .header-title {
-        font-size: 24px; 
+        font-size: 26px; 
         font-weight: bold; 
         letter-spacing: 1px; 
         text-transform: uppercase;
-        line-height: 1.1;
-        color: white;
-        margin-left: 15px;
-    }
-
-    /* Contenedor del Logo */
-    .logo-container {
-        background: white; 
-        border-radius: 50%; 
-        width: 55px; 
-        height: 55px; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        margin: 0;
+        line-height: 1.2;
     }
 
     /* Filas compactas */
@@ -65,7 +51,7 @@ st.markdown("""
         line-height: 1 !important;
     }
     
-    /* Tipografía */
+    /* Tipografía General */
     p { margin: 0 !important; }
     .txt-hora { color: #d32f2f; font-weight: 700; font-size: 14px; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
@@ -86,10 +72,10 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
 
-    /* Responsividad para móviles */
+    /* Responsividad */
     @media (max-width: 600px) {
-        .header-box { flex-direction: column; align-items: flex-start; gap: 10px; padding: 10px; }
-        .header-title { font-size: 18px; margin-left: 0; margin-top: 5px; }
+        .header-box { flex-direction: column; align-items: flex-start; gap: 10px; }
+        .header-title { font-size: 20px; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -98,7 +84,7 @@ st.markdown("""
 def conectar_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # Asegúrate de que st.secrets esté configurado correctamente en tu despliegue
+        # Ajusta esto si usas st.secrets o archivo json local
         key_dict = json.loads(st.secrets["service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         client = gspread.authorize(creds)
@@ -146,19 +132,12 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- HTML DEL ENCABEZADO CON LOGO Y TÍTULO ---
+    # --- HTML DEL ENCABEZADO (SIN IMAGEN) ---
     st.markdown(f"""
     <div class="header-box">
-        <div style="display: flex; align-items: center;">
-            <div class="logo-container">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg" 
-                     width="38" style="vertical-align: middle;" alt="Peugeot">
-            </div>
-            <div class="header-title">
-                PROGRAMACIÓN<br>DEL LAVADERO
-            </div>
+        <div class="header-title">
+            PROGRAMACIÓN DEL LAVADERO
         </div>
-        
         <div style="text-align: right; min-width: 100px;">
             <div style="font-size: 18px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div>
             <div style="font-size: 14px; opacity: 0.85;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
