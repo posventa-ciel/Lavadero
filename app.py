@@ -5,74 +5,75 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import json
 import pytz
-import plotly.express as px  # Agregamos Plotly para gráficos estilo pro
+import plotly.express as px
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Lavadero", layout="wide")
+st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS CSS (ADAPTADOS DE TU REFERENCIA) ---
+# --- LOGO SVG (CÓDIGO PURO, IMPOSIBLE QUE FALLE) ---
+# Este es el dibujo vectorial del León (simplificado) y texto
+LOGO_SVG = """
+<svg width="200" height="50" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="50" height="50" rx="5" fill="#00235d"/>
+  <path d="M15 10 L15 40 L25 40 C35 40 35 30 25 30 L15 30" stroke="white" stroke-width="3" fill="none"/>
+  <text x="60" y="32" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#00235d">PEUGEOT</text>
+</svg>
+"""
+
+# --- ESTILOS CSS "HIGH DENSITY" ---
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
+    /* 1. Ajuste de Techo */
+    .block-container { 
+        padding-top: 1.5rem !important; 
+        padding-bottom: 1rem !important; 
+    }
     
-    /* ENCABEZADO AZUL (Igual a tu referencia) */
+    /* 2. Encabezado Compacto */
     .portada-container { 
         background: linear-gradient(90deg, #00235d 0%, #004080 100%); 
         color: white; 
-        padding: 1rem 1.5rem; 
-        border-radius: 10px; 
-        margin-bottom: 1.5rem; 
+        padding: 10px 15px; /* Menos relleno */
+        border-radius: 6px; 
+        margin-bottom: 10px; 
         display: flex; 
         justify-content: space-between; 
         align-items: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
-    /* TARJETAS DE MÉTRICAS (Igual a tu referencia) */
-    .metric-card { 
-        background-color: white; 
-        border: 1px solid #dee2e6; 
-        padding: 15px; 
-        border-radius: 8px; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-        text-align: center; 
-        height: 100%; 
-        display: flex; 
-        flex-direction: column; 
-        justify-content: center; 
-    }
-    
-    /* ESTILOS DE TABLA PERSONALIZADA */
-    .row-card {
-        background-color: white;
-        border-bottom: 1px solid #eee;
-        padding: 8px 10px;
+    /* 3. Filas ULTRA COMPACTAS */
+    .compact-row {
+        border-bottom: 1px solid #e0e0e0;
+        padding: 2px 0 !important; /* Mínimo espacio */
+        min-height: 30px !important;
         display: flex;
         align-items: center;
-        transition: background-color 0.2s;
     }
-    .row-card:hover { background-color: #f8f9fa; }
     
-    /* TEXTOS */
-    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 15px; }
-    .txt-patente { color: #00235d; font-weight: bold; font-size: 15px; }
-    .txt-modelo { color: #444; font-size: 13px; font-weight: 500; }
-    .txt-asesor { color: #666; font-size: 12px; font-style: italic; }
+    /* 4. Textos Ajustados */
+    p { margin: 0 !important; }
+    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 13px; }
+    .txt-patente { color: #00235d; font-weight: bold; font-size: 13px; }
+    .txt-modelo { color: #333; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-asesor { color: #666; font-size: 11px; }
     
-    /* BOTONES ESTILIZADOS */
+    /* 5. Botones Slim */
     .stButton button {
-        border-radius: 6px;
-        font-weight: 600;
-        font-size: 12px;
-        height: 32px;
+        height: 24px !important; /* Altura mínima */
+        font-size: 11px !important;
+        padding: 0px 8px !important;
         border: none;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        line-height: 1 !important;
+        margin-top: 2px !important;
+    }
+    
+    /* 6. Espacios entre elementos de Streamlit */
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
-# --- LOGO EN BASE64 (HTML PURO) ---
-LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAhFBMVEUAAAAA//8AzMwA/wAAzP8A//8MzMwMzP8AmZkAmf8zMzMAZmYAzMwz/zMA/8wz//8z/MwzAABmZgBm/2Zm//9m/5lm/2YzM2YzM5lmZswzM8wzM/8zMzMzAAAAmcwAmf8AmZkAZswAZpkAZgAAZjMAZswAMzMAM2YAMwAAM8wAM/8AMwBmZma2AAAAxnRSTlMAu4vC/vC3j/7+/v7+8q+Z/v7+q4uL/v7+u/7+tI/+/v7+i/7+s5n+tP7+i4v+/v7+3/v7+i/7+8v7+/v7+tP7+8ov+/v7+q4v+/v7+q/7+/v6L/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v63/v7+i/7+/v7+/v7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+q/7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+8r7r3wAAAfdJREFUSMe1lU1rwlAQx08T32qsFxF8W6u26sVaD1ZBqCCFInioQvHQAwqeexD8f9+kE81LFl1P3eG3CNnN/Oad5M2E4J9A6LgO05iWwzAMg9gO05QG/xLItw7bSiaTrm3fOiyCDeR7j+tUq9Vut0/53uclhEB+DLhOvV4fDAbD4ZB9DDgR+Tng5vP5YDAajUbD4Xg8Ho3H48F87uZE5NeIm8/n0+l0Op3NZrPZbDabz6fT+dzLi8ivCTefz2ez2Ww2m81ms9lsNpvNZtP53MuLyK8JN5/PZ7PZbDabzWaz2Ww2m81m0/ncy4vIrwk3n89ns9lsNpvNZrO5d1y31+s5/wEivybcfD6fTqfT6XQ2m81ms9lsPp9O53MvLyK/Btx8Ph8MRqPRaDgcXl9fX11djcfjwXzu5kTkx4Dr1Ov1wWAwHA7ZxwD7I0gI5FuP61Sr1W63T/neZyVEIP86bCuZTLq2fessgQzDMI1p2QzDMAx7J7bDNKXBP4FwHIdpDMuwDMvYDtM49k8gXNdhGtNyGIZhENthmtLgXwL51mFbyWTS9X91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3WI/zrEfx3ivw7xX4f4r0P81yH+6xD/dYj/OsR/HeK/DvFfh/ivQ/zXIf7rEP91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3XIf/0G26wW10u4R5gAAAAASUVORK5CYII="
 
 # --- CONEXIÓN ---
 def conectar_sheet():
@@ -87,7 +88,7 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}")
         return None
 
-# --- FUNCIONES AUXILIARES ---
+# --- FUNCIONES ---
 def calcular_minutos(h1, h2):
     try:
         fmt = "%H:%M"
@@ -125,19 +126,17 @@ def main():
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
-    # --- PORTADA TIPO "GRUPO CENOA" ---
+    # --- PORTADA COMPACTA (SVG INCRUSTADO) ---
     st.markdown(f'''
     <div class="portada-container">
-        <div style="display: flex; align-items: center; gap: 15px;">
-             <img src="{LOGO_B64}" width="50" style="border-radius: 5px;">
-             <div>
-                <h1 style="margin:0; font-size: 1.8rem;">Control de Lavadero</h1>
-                <h3 style="margin:0; font-size: 1rem; opacity: 0.9;">Gestión Operativa Postventa</h3>
+        <div style="display: flex; align-items: center; gap: 10px;">
+             {LOGO_SVG}
+             <div style="margin-left: -120px;"> <span style="font-size: 1.2rem; font-weight: bold; color: white;">CONTROL LAVADERO</span>
              </div>
         </div>
-        <div style="text-align: right;">
-            <div style="font-size: 1.2rem; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
-            <div style="font-size: 0.9rem;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
+        <div style="text-align: right; line-height: 1.2;">
+            <div style="font-size: 1rem; font-weight: bold;">{hoy_date.strftime("%d/%m/%Y")}</div>
+            <div style="font-size: 0.8rem; opacity: 0.8;">{datetime.now(tz_ar).strftime("%H:%M")} hs</div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -146,7 +145,6 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
-    # INDICES
     IDX_FECHA = 0
     IDX_ASESOR = 2
     IDX_DOMINIO = 3
@@ -159,14 +157,12 @@ def main():
     IDX_ESTADO = 12
     IDX_CONTROL = 13 
 
-    # --- SIDEBAR (FILTROS) ---
     with st.sidebar:
-        st.header("🔍 Filtros")
-        fecha_sel = st.date_input("Fecha:", hoy_date)
+        st.markdown("**Filtros**")
+        fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
-    # --- PROCESAMIENTO DE DATOS ---
     pendientes = []
     terminados_hoy = []
     tiempos_hoy = []
@@ -195,7 +191,6 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
-        # OPERATIVO
         if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
@@ -216,7 +211,6 @@ def main():
             else:
                 pendientes.append(item)
 
-        # HISTORICO
         if es_finalizado:
             try:
                 fecha_clean = fecha_celda.split()[0]
@@ -226,45 +220,34 @@ def main():
                     historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
             except: pass
 
-    # --- PESTAÑAS ESTILO GRUPO CENOA ---
-    menu_opts = ["🏠 Operación", "📊 Métricas Hoy", "📈 Histórico"]
-    selected_tab = st.radio("", menu_opts, horizontal=True, label_visibility="collapsed")
-    st.markdown("---")
+    tab_op, tab_hoy, tab_hist = st.tabs(["🚗 Operación", "📊 Métricas", "📈 Histórico"])
 
-    # ==========================
-    # PESTAÑA 1: OPERACIÓN
-    # ==========================
-    if selected_tab == "🏠 Operación":
-        
-        # --- SECCIÓN PENDIENTES ---
-        st.subheader(f"🚗 Pendientes de Lavado ({len(pendientes)})")
-        
+    with tab_op:
+        # PENDIENTES
+        st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            # CABECERA DE TABLA
-            c1, c2, c3, c4, c5 = st.columns([0.8, 1, 2, 1, 1.5])
-            c1.markdown("**Hora**")
-            c2.markdown("**Patente**")
-            c3.markdown("**Modelo**")
-            c4.markdown("**Asesor**")
-            c5.markdown("**Acción**")
+            c1, c2, c3, c4, c5 = st.columns([0.6, 0.8, 2, 0.8, 1.5])
+            c1.caption("HORA")
+            c2.caption("PATENTE")
+            c3.caption("MODELO")
+            c4.caption("ASESOR")
+            c5.caption("ACCION")
             
             for p in pendientes:
                 with st.container():
-                    # Usamos HTML para simular la "Card" de fila
-                    st.markdown('<div class="row-card">', unsafe_allow_html=True)
-                    col = st.columns([0.8, 1, 2, 1, 1.5])
-                    
+                    # FILA COMPACTA MANUAL
+                    col = st.columns([0.6, 0.8, 2, 0.8, 1.5])
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
-                    col[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
+                    col[2].markdown(f"<span class='txt-modelo' title='{p['mod']}'>{p['mod']}</span>", unsafe_allow_html=True)
                     col[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     
                     with col[4]:
                         if not p['ini']:
-                            if st.button("▶️ INICIAR", key=f"g{p['fila']}", type="primary"):
+                            if st.button("▶️ INICIO", key=f"g{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INICIO + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "LAVANDO")
                                 st.rerun()
@@ -288,97 +271,70 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
         else:
-            st.success("✅ ¡Todo al día! No hay vehículos pendientes.")
+            st.info("Sin pendientes.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- SECCIÓN FINALIZADOS ---
-        st.subheader(f"✅ Finalizados ({len(terminados_hoy)})")
-        
+        # FINALIZADOS
+        st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: x["orden_term"])
-            
-            # CABECERA TABLA
-            t1, t2, t3, t4, t5, t6 = st.columns([0.6, 0.6, 1, 2, 0.8, 0.5])
-            t1.caption("INICIO")
+            t1, t2, t3, t4, t5, t6 = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
+            t1.caption("INI")
             t2.caption("FIN")
-            t3.caption("DOMINIO")
+            t3.caption("DOM")
             t4.caption("MODELO")
-            t5.caption("ASESOR")
+            t5.caption("ASE")
             t6.caption("OK")
             
             for t in terminados_hoy:
-                with st.container():
-                     st.markdown('<div class="row-card" style="padding: 4px 10px;">', unsafe_allow_html=True)
-                     r = st.columns([0.6, 0.6, 1, 2, 0.8, 0.5])
+                 with st.container():
+                     r = st.columns([0.6, 0.6, 0.8, 2, 0.8, 0.5])
                      fin_s = t['fin2'] if t['fin2'] else t['fin']
-                     
                      r[0].write(t['ini'])
                      r[1].write(fin_s)
                      r[2].markdown(f"**{t['dom']}**")
                      r[3].markdown(f"<span style='font-size:12px'>{t['mod']}</span>", unsafe_allow_html=True)
                      r[4].write(t['ase'])
-                     
                      with r[5]:
-                        nk = st.checkbox("", value=t['ok'], key=f"chk_{t['fila']}")
+                        nk = st.checkbox("", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
                         if nk != t['ok']:
                             hoja.update_cell(t['fila'], IDX_CONTROL + 1, "OK" if nk else "")
                             st.rerun()
-                     st.markdown('</div>', unsafe_allow_html=True)
+                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-    # ==========================
-    # PESTAÑA 2: MÉTRICAS HOY
-    # ==========================
-    elif selected_tab == "📊 Métricas Hoy":
+    with tab_hoy:
         avg_hoy = int(sum(tiempos_hoy)/len(tiempos_hoy)) if tiempos_hoy else 0
-        max_hoy = max(tiempos_hoy) if tiempos_hoy else 0
-        
-        # KPI CARDS Estilo Reference
         k1, k2, k3 = st.columns(3)
-        with k1: st.markdown(f'<div class="metric-card"><p style="color:#666; font-size:0.9rem;">Autos Lavados</p><h2 style="color:#00235d;">{len(terminados_hoy)}</h2><div style="font-size:0.8rem; color:#28a745;">Hoy</div></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="metric-card"><p style="color:#666; font-size:0.9rem;">Tiempo Promedio</p><h2 style="color:#00235d;">{avg_hoy} min</h2><div style="font-size:0.8rem; color:#888;">Objetivo: 45 min</div></div>', unsafe_allow_html=True)
-        with k3: st.markdown(f'<div class="metric-card"><p style="color:#666; font-size:0.9rem;">Tiempo Máximo</p><h2 style="color:#dc3545;">{max_hoy} min</h2><div style="font-size:0.8rem; color:#888;">Pico del día</div></div>', unsafe_allow_html=True)
+        with k1: st.metric("Lavados Hoy", len(terminados_hoy))
+        with k2: st.metric("Promedio", f"{avg_hoy} min")
+        with k3: st.metric("Máximo", f"{max(tiempos_hoy) if tiempos_hoy else 0} min")
         
-        st.markdown("<br>", unsafe_allow_html=True)
-        
+        st.divider()
         if tiempos_hoy:
-            st.markdown("##### ⏱️ Distribución de Tiempos (Hoy)")
-            fig = px.histogram(x=tiempos_hoy, nbins=10, labels={'x':'Minutos', 'y':'Cantidad'}, color_discrete_sequence=['#00235d'])
-            fig.update_layout(showlegend=False, height=300)
+            fig = px.histogram(x=tiempos_hoy, nbins=10, labels={'x':'Minutos', 'y':'Autos'}, title="Tiempos de Hoy", color_discrete_sequence=['#00235d'])
+            fig.update_layout(height=300)
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Esperando datos de lavados finalizados para graficar...")
 
-    # ==========================
-    # PESTAÑA 3: HISTÓRICO
-    # ==========================
-    elif selected_tab == "📈 Histórico":
+    with tab_hist:
         if historial_data:
             df_hist = pd.DataFrame(historial_data)
             df_hist['Fecha_DT'] = pd.to_datetime(df_hist['Fecha'], format="%d/%m/%Y", errors='coerce')
             df_hist = df_hist.dropna(subset=['Fecha_DT']).sort_values('Fecha_DT')
             
-            col_g1, col_g2 = st.columns(2)
-            
-            with col_g1:
-                st.markdown("##### 📊 Cantidad de Autos por Día")
+            c1, c2 = st.columns(2)
+            with c1:
                 df_counts = df_hist.groupby("Fecha_DT")["Auto"].sum().reset_index()
-                fig_bar = px.bar(df_counts, x='Fecha_DT', y='Auto', text='Auto', color_discrete_sequence=['#00235d'])
-                fig_bar.update_layout(xaxis_title="Fecha", yaxis_title="Cantidad", height=350)
+                fig_bar = px.bar(df_counts, x='Fecha_DT', y='Auto', title="Autos por Día", color_discrete_sequence=['#00235d'])
+                fig_bar.update_layout(height=300)
                 st.plotly_chart(fig_bar, use_container_width=True)
-                
-            with col_g2:
-                st.markdown("##### ⏱️ Tiempo Promedio por Día")
+            with c2:
                 df_avg = df_hist.groupby("Fecha_DT")["Tiempo"].mean().reset_index()
-                fig_line = px.line(df_avg, x='Fecha_DT', y='Tiempo', markers=True, color_discrete_sequence=['#28a745'])
-                fig_line.add_hline(y=45, line_dash="dot", annotation_text="Obj (45m)", line_color="gray")
-                fig_line.update_layout(xaxis_title="Fecha", yaxis_title="Minutos", height=350)
+                fig_line = px.line(df_avg, x='Fecha_DT', y='Tiempo', title="Tiempo Promedio", markers=True, color_discrete_sequence=['#28a745'])
+                fig_line.update_layout(height=300)
                 st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.info("No hay suficiente historial para generar reportes.")
 
 if __name__ == "__main__":
     main()
