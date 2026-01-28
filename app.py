@@ -9,45 +9,32 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- LOGO PEUGEOT EN CÓDIGO (BASE64) - NO REQUIERE INTERNET ---
+# --- LOGO PEUGEOT (DATA URI BASE64) ---
+# Esta cadena larga ES la imagen. No se descarga de internet.
 LOGO_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAhFBMVEUAAAAA//8AzMwA/wAAzP8A//8MzMwMzP8AmZkAmf8zMzMAZmYAzMwz/zMA/8wz//8z/MwzAABmZgBm/2Zm//9m/5lm/2YzM2YzM5lmZswzM8wzM/8zMzMzAAAAmcwAmf8AmZkAZswAZpkAZgAAZjMAZswAMzMAM2YAMwAAM8wAM/8AMwBmZma2AAAAxnRSTlMAu4vC/vC3j/7+/v7+8q+Z/v7+q4uL/v7+u/7+tI/+/v7+i/7+s5n+tP7+i4v+/v7+3/v7+i/7+8v7+/v7+tP7+8ov+/v7+q4v+/v7+q/7+/v6L/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v63/v7+i/7+/v7+/v7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+/v7+i/7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+q/7+/v7+/v7+tP7+/v7+/v7+/v7+/v7+/v7+8r7r3wAAAfdJREFUSMe1lU1rwlAQx08T32qsFxF8W6u26sVaD1ZBqCCFInioQvHQAwqeexD8f9+kE81LFl1P3eG3CNnN/Oad5M2E4J9A6LgO05iWwzAMg9gO05QG/xLItw7bSiaTrm3fOiyCDeR7j+tUq9Vut0/53uclhEB+DLhOvV4fDAbD4ZB9DDgR+Tng5vP5YDAajUbD4Xg8Ho3H48F87uZE5NeIm8/n0+l0Op3NZrPZbDabz6fT+dzLi8ivCTefz2ez2Ww2m81ms9lsNpvNZtP53MuLyK8JN5/PZ7PZbDabzWaz2Ww2m81m0/ncy4vIrwk3n89ns9lsNpvNZrO5d1y31+s5/wEivybcfD6fTqfT6XQ2m81ms9lsPp9O53MvLyK/Btx8Ph8MRqPRaDgcXl9fX11djcfjwXzu5kTkx4Dr1Ov1wWAwHA7ZxwD7I0gI5FuP61Sr1W63T/neZyVEIP86bCuZTLq2fessgQzDMI1p2QzDMAx7J7bDNKXBP4FwHIdpDMuwDMvYDtM49k8gXNdhGtNyGIZhENthmtLgXwL51mFbyWTS9X91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3WI/zrEfx3ivw7xX4f4r0P81yH+6xD/dYj/OsR/HeK/DvFfh/ivQ/zXIf7rEP91iP86xH8d4r8O8V+H+K9D/Nch/usQ/3XIf/0G26wW10u4R5gAAAAASUVORK5CYII="
 
-# --- ESTILOS VISUALES ---
+# --- ESTILOS ---
 st.markdown("""
 <style>
-    /* 1. MARGEN SUPERIOR AJUSTADO */
+    /* Ajuste para que el encabezado no quede tapado */
     .block-container {
-        padding-top: 3.5rem !important; 
+        padding-top: 2rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* 2. HEADER */
-    .header-div {
-        display: flex; 
-        align-items: center; 
-        gap: 15px;
-        padding-bottom: 10px; 
-        border-bottom: 2px solid #00235d; 
-        margin-bottom: 10px;
-    }
-    .main-title { 
-        font-size: 26px !important; 
-        font-weight: bold; 
-        color: #00235d; 
-        margin: 0 !important; 
-        line-height: 1.1; 
-    }
-    .sub-title { font-size: 14px; color: #666; margin: 0 !important; }
+    /* Títulos */
+    .main-title { font-size: 24px !important; font-weight: bold; color: #00235d; margin: 0; line-height: 1.2; }
+    .sub-title { font-size: 14px; color: #666; margin: 0; }
     
-    /* 3. FILAS COMPACTAS */
+    /* Filas Compactas */
     .row-container { 
-        padding: 3px 0 !important; 
+        padding: 2px 0 !important; 
         border-bottom: 1px solid #ddd; 
         align-items: center; 
-        height: 36px !important;
+        height: 38px !important; /* Altura fija */
     }
     
-    /* 4. BOTONES */
+    /* Botones */
     .stButton button { 
         height: 28px !important; 
         font-size: 12px !important; 
@@ -55,13 +42,14 @@ st.markdown("""
         margin-top: 2px !important;
     }
     
-    /* 5. TEXTOS Y ESPACIOS */
+    /* Eliminar márgenes extra */
     p { margin-bottom: 0px !important; }
+    
+    /* Estilos de Texto */
     .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
     .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
-    .txt-modelo { color: #222; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-modelo { color: #222; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #555; font-size: 12px; }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -111,16 +99,23 @@ def limpiar_asesor(nombre_completo):
     return partes[0]
 
 def main():
-    # --- HEADER CON IMAGEN BLINDADA (BASE64) ---
-    st.markdown(f"""
-    <div class="header-div">
-        <img src="{LOGO_B64}" width="50" style="border-radius: 4px;">
-        <div>
-            <div class="main-title">CONTROL DE LAVADERO</div>
-            <div class="sub-title">Gestión de Tiempos y Calidad</div>
+    # --- HEADER NATIVO CON COLUMNAS (SOLUCIÓN DEFINITIVA IMAGEN) ---
+    c_logo, c_text = st.columns([0.1, 0.9])
+    
+    with c_logo:
+        # Usamos st.image nativo que es más robusto para mostrar Base64
+        st.image(LOGO_B64, width=55)
+        
+    with c_text:
+        # Título HTML para ajustar márgenes
+        st.markdown("""
+        <div style="padding-top: 5px;">
+            <p class="main-title">CONTROL DE LAVADERO</p>
+            <p class="sub-title">Gestión de Tiempos y Calidad</p>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+    st.markdown("<hr style='margin: 5px 0; border-top: 2px solid #00235d;'>", unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
@@ -169,7 +164,6 @@ def main():
         control_ok = fila[IDX_CONTROL].strip().upper()
 
         es_finalizado = (estado == "FINALIZADO") or (fin1 and not estado) or fin2
-        
         es_hoy_filtro = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
         
         es_atrasado = False
@@ -179,6 +173,7 @@ def main():
                 if f_dt < fecha_sel: es_atrasado = True
             except: pass
 
+        # Datos Operativos
         if es_hoy_filtro or es_atrasado:
             item = {
                 "fila": i,
@@ -199,6 +194,7 @@ def main():
             else:
                 pendientes.append(item)
 
+        # Datos Históricos
         if es_finalizado:
             try:
                 fecha_clean = fecha_celda.split()[0]
@@ -208,6 +204,7 @@ def main():
                     historial_data.append({"Fecha": fecha_clean, "Tiempo": t_total, "Auto": 1})
             except: pass
 
+    # --- PESTAÑAS ---
     tab_op, tab_hoy, tab_hist = st.tabs(["🚗 OPERACIÓN", "📊 HOY", "📅 HISTORIAL"])
 
     with tab_op:
@@ -295,15 +292,15 @@ def main():
         st.markdown("##### Rendimiento de Hoy")
         k1, k2, k3 = st.columns(3)
         avg = int(sum(tiempos_hoy)/len(tiempos_hoy)) if tiempos_hoy else 0
-        with k1: st.metric("Lavados Hoy", len(terminados_hoy))
-        with k2: st.metric("Promedio Hoy", f"{avg} min")
-        with k3: st.metric("Pico Máximo", f"{max(tiempos_hoy) if tiempos_hoy else 0} min")
+        with k1: st.metric("Lavados", len(terminados_hoy))
+        with k2: st.metric("Promedio", f"{avg} min")
+        with k3: st.metric("Máximo", f"{max(tiempos_hoy) if tiempos_hoy else 0} min")
         
         st.divider()
         if tiempos_hoy:
             st.bar_chart(tiempos_hoy)
         else:
-            st.info("Esperando primeros autos...")
+            st.info("Sin datos para graficar hoy.")
 
     with tab_hist:
         st.markdown("##### Historial General")
@@ -312,13 +309,12 @@ def main():
             df_hist['Fecha_DT'] = pd.to_datetime(df_hist['Fecha'], format="%d/%m/%Y", errors='coerce')
             df_hist = df_hist.dropna(subset=['Fecha_DT']).sort_values('Fecha_DT')
 
-            st.markdown("📊 **Autos lavados por día**")
+            st.markdown("📊 **Autos por día**")
             df_counts = df_hist.groupby("Fecha", sort=False)["Auto"].sum().reset_index()
             st.bar_chart(df_counts.set_index("Fecha"))
             
             st.divider()
-
-            st.markdown("⏱️ **Tiempo promedio (min)**")
+            st.markdown("⏱️ **Promedio por día (min)**")
             df_avg = df_hist.groupby("Fecha", sort=False)["Tiempo"].mean().reset_index()
             st.line_chart(df_avg.set_index("Fecha"))
         else:
