@@ -9,53 +9,54 @@ import pytz
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Lavadero Postventa", layout="wide")
 
-# --- ESTILOS VISUALES MEJORADOS (NO TAN COMPACTOS) ---
+# --- ESTILOS OPTIMIZADOS PARA VER 6 FILAS ---
 st.markdown("""
 <style>
-    /* Ajuste para ganar espacio arriba sin pegar el título al borde */
+    /* 1. Subir el techo lo máximo posible sin cortar */
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* Títulos */
-    .main-header { font-size: 26px; font-weight: bold; color: #003366; margin: 0; }
-    .sub-header { font-size: 14px; color: #666; margin-bottom: 10px; }
+    /* 2. Header más compacto */
+    .main-header { font-size: 24px; font-weight: bold; color: #003366; margin: 0; }
+    .sub-header { font-size: 13px; color: #666; margin-bottom: 5px; }
     
-    /* Filas de la tabla con mejor espaciado */
+    /* 3. Filas más delgadas (Padding reducido de 6px a 2px) */
     .row-container { 
-        padding: 6px 0; 
+        padding: 3px 0; 
         border-bottom: 1px solid #e0e0e0; 
         align-items: center; 
-        min-height: 40px;
+        min-height: 35px; /* Altura mínima reducida */
     }
     
-    /* Textos Legibles */
-    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 15px; }
-    .txt-patente { color: #004488; font-weight: bold; font-size: 15px; }
-    .txt-modelo { color: #333; font-size: 14px; font-weight: 500; }
-    .txt-asesor { color: #555; font-size: 13px; font-style: italic; }
+    /* 4. Textos: Mantenemos legibilidad pero ajustamos espacios */
+    .txt-hora { color: #d32f2f; font-weight: bold; font-size: 14px; }
+    .txt-patente { color: #004488; font-weight: bold; font-size: 14px; }
+    .txt-modelo { color: #333; font-size: 13px; font-weight: 500; line-height: 1.1; } /* Line-height ajustado */
+    .txt-asesor { color: #555; font-size: 12px; font-style: italic; }
     
-    /* Botones más funcionales */
+    /* 5. Botones Slim (Más delgados) */
     .stButton button { 
         width: 100%; 
         border-radius: 4px; 
         font-weight: 600; 
-        font-size: 13px;
-        height: 32px;
+        font-size: 12px;
+        height: 28px !important; /* Altura forzada a 28px */
+        padding: 0px !important;
+        margin-top: 0px !important;
     }
 
-    /* KPI Cards */
+    /* KPI Cards compactas */
     .kpi-card { 
         background-color: white; 
         border: 1px solid #ddd; 
-        border-radius: 8px; 
-        padding: 10px; 
+        border-radius: 6px; 
+        padding: 8px; 
         text-align: center; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .kpi-val { font-size: 22px; font-weight: bold; color: #003366; }
-    .kpi-lbl { font-size: 12px; color: #666; text-transform: uppercase; }
+    .kpi-val { font-size: 20px; font-weight: bold; color: #003366; }
+    .kpi-lbl { font-size: 11px; color: #666; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,29 +99,27 @@ def obtener_minutos_orden(hora_str):
     except: return 99999
 
 def limpiar_asesor(nombre_completo):
-    # Lógica: Si "21 JAVIER...", toma "JAVIER". Si "BELEN...", toma "BELEN".
     if not nombre_completo: return ""
     partes = nombre_completo.split()
     if len(partes) > 1 and partes[0].isdigit():
-        return partes[1] # Devuelve el segundo elemento si el primero es numero
-    return partes[0] # Devuelve el primero si no es numero
+        return partes[1]
+    return partes[0]
 
 def main():
-    # --- HEADER ---
-    col_img, col_txt = st.columns([0.15, 0.85])
+    # --- HEADER COMPACTO ---
+    col_img, col_txt = st.columns([0.1, 0.9])
     with col_img:
         st.image("https://upload.wikimedia.org/wikipedia/commons/f/f7/Peugeot_Logo_2021.svg", use_container_width=True)
     with col_txt:
-        st.markdown('<h1 class="main-header">CONTROL DE LAVADERO - POSTVENTA</h1>', unsafe_allow_html=True)
-        st.markdown('<div class="sub-header">Gestión de calidad y tiempos</div>', unsafe_allow_html=True)
+        st.markdown('<h1 class="main-header">CONTROL DE LAVADERO</h1>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-header">Gestión de tiempos - Postventa</div>', unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
 
     raw_data = hoja.get_all_values()
     
-    # INDICES (Agregamos la Columna N para CONTROL)
-    # A=0 ... M=12 ... N=13 (CONTROL)
+    # INDICES
     IDX_FECHA = 0
     IDX_ASESOR = 2
     IDX_DOMINIO = 3
@@ -131,15 +130,15 @@ def main():
     IDX_INI2 = 10
     IDX_FIN2 = 11
     IDX_ESTADO = 12
-    IDX_CONTROL = 13 # NUEVA COLUMNA
+    IDX_CONTROL = 13 
 
     tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
     hora_actual = datetime.now(tz_ar).strftime("%H:%M")
     hoy_date = datetime.now(tz_ar).date()
 
     with st.sidebar:
-        st.markdown("### 📅 Filtros")
-        fecha_sel = st.date_input("Fecha:", hoy_date)
+        st.markdown("### Filtros")
+        fecha_sel = st.date_input("Fecha:", hoy_date, label_visibility="collapsed")
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
@@ -148,7 +147,7 @@ def main():
     tiempos_dia = []
 
     for i, fila in enumerate(raw_data[1:], start=2):
-        if len(fila) < 14: fila += [""] * (14 - len(fila)) # Rellenar hasta Col N
+        if len(fila) < 14: fila += [""] * (14 - len(fila))
         
         dom = fila[IDX_DOMINIO]
         pro_raw = fila[IDX_PROMETIDO].upper()
@@ -160,7 +159,7 @@ def main():
         ini1, fin1 = fila[IDX_INICIO], fila[IDX_FIN]
         ini2, fin2 = fila[IDX_INI2], fila[IDX_FIN2]
         estado = fila[IDX_ESTADO].strip().upper()
-        control_ok = fila[IDX_CONTROL].strip().upper() # Valor de la celda OK
+        control_ok = fila[IDX_CONTROL].strip().upper()
 
         es_finalizado = (estado == "FINALIZADO") or (fin1 and not estado) or fin2
         es_hoy = (f_str in fecha_celda) or (f_str_cero in fecha_celda) or (f_str in pro_raw)
@@ -176,12 +175,12 @@ def main():
             item = {
                 "fila": i,
                 "dom": dom, "mod": fila[IDX_MODELO],
-                "ase": limpiar_asesor(fila[IDX_ASESOR]), # Limpiamos el nombre aquí
+                "ase": limpiar_asesor(fila[IDX_ASESOR]),
                 "pro": fila[IDX_PROMETIDO],
                 "ini": ini1, "fin": fin1,
                 "ini2": ini2, "fin2": fin2,
                 "est": estado, "atr": es_atrasado,
-                "ok": (control_ok == "OK"), # Boolean para el checkbox
+                "ok": (control_ok == "OK"),
                 "orden_pend": normalizar_hora(fila[IDX_PROMETIDO]),
                 "orden_term": obtener_minutos_orden(ini1)
             }
@@ -199,12 +198,11 @@ def main():
 
     with tab_op:
         # --- PENDIENTES ---
-        st.markdown(f"### 📋 Pendientes ({len(pendientes)})")
+        st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["orden_pend"]))
             
-            # Encabezados
-            c_h = st.columns([0.8, 1, 2.2, 1, 1.2])
+            c_h = st.columns([0.7, 1, 2.5, 0.8, 1.2])
             c_h[0].caption("HORA")
             c_h[1].caption("PATENTE")
             c_h[2].caption("MODELO")
@@ -213,12 +211,13 @@ def main():
             
             for p in pendientes:
                 with st.container():
-                    col = st.columns([0.8, 1, 2.2, 1, 1.2])
+                    col = st.columns([0.7, 1, 2.5, 0.8, 1.2])
                     
                     hora_txt = f"⚠️ {p['pro']}" if p['atr'] else p['pro']
                     col[0].markdown(f"<span class='txt-hora'>{hora_txt}</span>", unsafe_allow_html=True)
                     col[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
-                    col[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
+                    # Tooltip en modelo por si se corta
+                    col[2].markdown(f"<span class='txt-modelo' title='{p['mod']}'>{p['mod']}</span>", unsafe_allow_html=True)
                     col[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     
                     with col[4]:
@@ -253,21 +252,21 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- FINALIZADOS CON CONTROL ---
-        st.markdown(f"### ✅ Finalizados ({len(terminados)})")
+        # --- FINALIZADOS ---
+        st.markdown(f"**Finalizados ({len(terminados)})**")
         if terminados:
             terminados.sort(key=lambda x: x["orden_term"])
             
-            c_t = st.columns([0.8, 0.8, 1, 2.5, 1, 0.8])
+            c_t = st.columns([0.7, 0.7, 1, 2.5, 0.8, 0.5])
             c_t[0].caption("INICIO")
             c_t[1].caption("FIN")
             c_t[2].caption("PATENTE")
             c_t[3].caption("MODELO")
             c_t[4].caption("ASESOR")
-            c_t[5].caption("CONTROL") # Nueva columna
+            c_t[5].caption("OK")
             
             for t in terminados:
-                r = st.columns([0.8, 0.8, 1, 2.5, 1, 0.8])
+                r = st.columns([0.7, 0.7, 1, 2.5, 0.8, 0.5])
                 fin_s = t['fin2'] if t['fin2'] else t['fin']
                 
                 r[0].write(t['ini'])
@@ -276,9 +275,7 @@ def main():
                 r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
                 r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
                 
-                # Checkbox para el Control de Calidad
                 with r[5]:
-                    # Si ya estaba OK, aparece marcado. Si el usuario lo cambia, se actualiza el sheet.
                     nuevo_ok = st.checkbox("OK", value=t['ok'], key=f"chk_{t['fila']}", label_visibility="collapsed")
                     if nuevo_ok != t['ok']:
                         valor_sheet = "OK" if nuevo_ok else ""
@@ -290,9 +287,9 @@ def main():
     with tab_kpi:
         k1, k2, k3 = st.columns(3)
         avg = int(sum(tiempos_dia)/len(tiempos_dia)) if tiempos_dia else 0
-        with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{len(terminados)}</div><div class='kpi-lbl'>Total Lavados</div></div>", unsafe_allow_html=True)
-        with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{avg}'</div><div class='kpi-lbl'>Promedio Taller</div></div>", unsafe_allow_html=True)
-        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{max(tiempos_dia) if tiempos_dia else 0}'</div><div class='kpi-lbl'>Pico Máximo</div></div>", unsafe_allow_html=True)
+        with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{len(terminados)}</div><div class='kpi-lbl'>Total</div></div>", unsafe_allow_html=True)
+        with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{avg}'</div><div class='kpi-lbl'>Promedio</div></div>", unsafe_allow_html=True)
+        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-val'>{max(tiempos_dia) if tiempos_dia else 0}'</div><div class='kpi-lbl'>Máximo</div></div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
