@@ -287,11 +287,14 @@ def main():
                     col[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     
                     with col[4]:
+                        # CASO 1: No empezó (Mostrar PLAY)
                         if not p['ini']:
                             if st.button("▶️", key=f"g{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INICIO + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "LAVANDO")
                                 st.rerun()
+                        
+                        # CASO 2: Está lavando (Mostrar PAUSA y FIN)
                         elif p['ini'] and not p['fin']:
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
@@ -302,17 +305,21 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
+                        
+                        # CASO 3: Está en PAUSA (Mostrar REANUDAR/REPASO)
+                        # Agregamos la condición explicita del estado para que no lo tome como finalizado
                         elif p['est'] == "PAUSA" and not p['ini2']:
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "REPASO")
                                 st.rerun()
+                        
+                        # CASO 4: Está en REPASO (Mostrar FIN definitivo)
                         elif p['ini2'] and not p['fin2']:
                             if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_ESTADO + 1, "FINALIZADO")
                                 st.rerun()
-                    
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
         else:
             st.info("Sin pendientes.")
