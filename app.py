@@ -110,23 +110,18 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Consideramos Finalizado si el estado lo dice o si se terminó el repaso (FIN2)
+        # --- AJUSTE DE LÓGICA AQUÍ ---
+        # Solo es finalizado si el estado dice "FINALIZADO" o si tiene el Repaso terminado (FIN2)
+        # Esto evita que la "PAUSA" (que llena FIN1) lo saque de la lista.
         es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN2].strip() != "")
+        
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
 
-        # --- FILTRO DE SEGURIDAD PARA ATRASADOS (SOLO ÚLTIMOS 3 DÍAS) ---
         es_atrasado = False
-        es_muy_viejo = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
-            if f_dt < fecha_sel:
-                es_atrasado = True
-                # Si el turno es de hace más de 3 días, no lo mostramos para no ensuciar
-                if (fecha_sel - f_dt).days > 3:
-                    es_muy_viejo = True
+            if f_dt < fecha_sel: es_atrasado = True
         except: pass
-
-        if es_muy_viejo: continue # Ignora filas de fechas muy antiguas
 
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -137,11 +132,9 @@ def main():
         }
 
         if es_finalizado:
-            # Solo mostramos en terminados si es de la fecha que estamos viendo
-            if es_de_fecha_seleccionada:
+            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            # En pendientes: si es de hoy o si es un atrasado reciente
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
@@ -161,11 +154,13 @@ def main():
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[4]:
+                        # Si no empezó o está vacío el estado
                         if not p['ini'] or p['est'] == "":
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        elif p['est'] == "LAVANDO":
+                        # Si está lavando (tiene inicio pero no fin de lavado)
+                        elif p['est'] == "LAVANDO" or (p['ini'] and not p['fin']):
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
@@ -173,14 +168,17 @@ def main():
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                        # Si está en pausa, mostrar botón de reinicio/repaso
                         elif p['est'] == "PAUSA":
                             if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
+                        # Si está en repaso, mostrar botón para finalizar definitivo
                         elif p['est'] == "REPASO":
-                            if st.button("🏁", key=f"f2{p['fila']}"):
+                             if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>")
