@@ -21,19 +21,16 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
-    
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
-
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -112,42 +109,34 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        
-        # Un auto está finalizado si tiene hora en FIN1 o FIN2 o el estado es FINALIZADO
-        tiene_fin = (fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
-        es_finalizado = (estado == "FINALIZADO" or tiene_fin)
-        
+        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
-        
-        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
+
+        # Lógica para detectar si es un auto atrasado de días anteriores
+        es_atrasado = False
+        try:
+            f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
+            if f_dt < fecha_sel: es_atrasado = True
+        except: pass
+
+        item = {
+            "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
+            "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
+            "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
+            "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
+            "min_orden": obtener_minutos_orden(fila[IDX_PRO])
+        }
+
         if es_finalizado:
-            # Si se terminó, aparece en la lista si su TURNO era de la fecha seleccionada
-            # O si el auto AG99SJ (atrasado) se terminó hoy, forzamos que aparezca hoy
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and tiene_fin and not es_de_fecha_seleccionada):
-                item = {
-                    "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
-                    "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
-                    "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-                    "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": False,
-                    "min_orden": obtener_minutos_orden(fila[IDX_PRO])
-                }
+            # MOSTRAR EN TERMINADOS SI:
+            # 1. Es de la fecha seleccionada
+            # 2. O es el AG99SJ (o cualquier atrasado) que terminaste hoy estando en la vista de hoy
+            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            # Si no está terminado, aparece si es de la fecha o si está atrasado
-            es_atrasado = False
-            try:
-                f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
-                if f_dt < fecha_sel: es_atrasado = True
-            except: pass
-
+            # MOSTRAR EN PENDIENTES SI:
+            # Es de hoy o es un atrasado que todavía no se terminó
             if es_de_fecha_seleccionada or es_atrasado:
-                item = {
-                    "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
-                    "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
-                    "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-                    "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
-                    "min_orden": obtener_minutos_orden(fila[IDX_PRO])
-                }
                 pendientes.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
@@ -187,7 +176,7 @@ def main():
         st.markdown("<br>")
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
-            terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['fin'] if x['fin'] else x['pro']))
+            terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
             cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
             h = st.columns(cols_f)
             h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL CALIDAD")
