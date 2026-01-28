@@ -121,7 +121,8 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
+        # Un auto solo sale de pendientes si el estado es FINALIZADO
+        es_finalizado = (estado == "FINALIZADO")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         es_atrasado = False
         try:
