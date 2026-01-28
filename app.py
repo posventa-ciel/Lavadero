@@ -107,11 +107,13 @@ def main():
         if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
-        f_ingreso = fila[IDX_FECHA]
+        f_ingreso_str = fila[IDX_FECHA].split()[0]
         estado = fila[IDX_EST].strip().upper()
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1] and not estado) or fila[IDX_FIN2]
         
-        es_de_fecha_calendario = (f_str in f_ingreso) or (f_str_cero in f_ingreso)
+        # Un auto está finalizado si el estado lo dice o si tiene hora de fin
+        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1] != "") or (fila[IDX_FIN2] != "")
+        
+        es_de_fecha_calendario = (f_str in f_ingreso_str) or (f_str_cero in f_ingreso_str)
 
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -122,29 +124,39 @@ def main():
         }
 
         if es_finalizado:
-            # MOSTRAR SI: Es de la fecha calendario O si hoy es hoy y el auto quedó finalizado (aunque sea viejo)
-            if es_de_fecha_calendario or (fecha_sel == hoy_date and fila[IDX_FIN1]):
-                # Verificamos que se haya terminado hoy o sea del día para no llenar la lista con meses de historia
+            # --- LÓGICA DE FILTRADO PARA FINALIZADOS ---
+            # Mostramos en la lista solo si:
+            # A) Es de la fecha que elegiste en el calendario.
+            # B) Si el auto es "viejo" pero se terminó hoy (y estás viendo hoy en el calendario).
+            # Para esto chequeamos que tenga hora de inicio hoy o estado finalizado hoy.
+            if es_de_fecha_calendario:
                 terminados_hoy.append(item)
+            elif fecha_sel == hoy_date and (fila[IDX_INI1] != "" or fila[IDX_INI2] != ""):
+                # Si el auto es de ayer, pero estás viendo "Hoy" y tiene actividad, lo mostramos.
+                # Pero para evitar los 21 autos viejos, filtramos que NO tenga el CONTROL DE CALIDAD OK
+                # asumiendo que si ya tiene el OK de ayer, no debe aparecer hoy.
+                if not item["ok"]:
+                    terminados_hoy.append(item)
         else:
-            # MOSTRAR SI: Es de hoy o anterior
+            # --- LÓGICA PARA PENDIENTES ---
             try:
-                f_dt = datetime.strptime(f_ingreso.split()[0], "%d/%m/%Y").date()
+                f_dt = datetime.strptime(f_ingreso_str, "%d/%m/%Y").date()
                 if f_dt < fecha_sel: item["atr"] = True
                 if f_dt <= fecha_sel: pendientes.append(item)
             except:
                 if es_de_fecha_calendario: pendientes.append(item)
 
+    # --- RENDERIZADO DE TABS ---
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
 
     with tab1:
         st.markdown(f"**Pendientes ({len(pendientes)})**")
+        # (Aquí va el código de renderizado de pendientes igual que antes...)
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
-            cols_p = [0.8, 0.8, 2, 0.8, 1.4]
             for p in pendientes:
                 with st.container():
-                    c = st.columns(cols_p)
+                    c = st.columns([0.8, 0.8, 2, 0.8, 1.4])
                     badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
