@@ -75,8 +75,7 @@ def main():
     if not hoja: return
     data = hoja.get_all_values()
     
-    # ÍNDICES SEGÚN TU IMAGEN
-    # A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10, L=11, M=12, N=13
+    # Índices basados en tu planilla
     IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD = 0, 2, 3, 4
     IDX_PRO, IDX_INI, IDX_FIN, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 7, 8, 9, 10, 11, 12, 13
 
@@ -88,6 +87,9 @@ def main():
 
     pendientes, terminados, historial = [], [], []
 
+    f_str = fecha_sel.strftime("%-d/%-m/%Y")
+    f_str_cero = fecha_sel.strftime("%d/%m/%Y")
+
     for i, fila in enumerate(data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
         
@@ -95,7 +97,7 @@ def main():
         fecha_fila = fila[IDX_FECHA]
         dom = fila[IDX_DOM].upper()
         
-        if not dom or "NO SE LAVA" in fila[IDX_PRO].upper(): continue
+        if not dom or any(x in fila[IDX_PRO].upper() for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
         item = {
@@ -107,19 +109,21 @@ def main():
             "fecha": fecha_fila
         }
 
-        # Lógica de clasificación
-        es_hoy = fecha_sel.strftime("%-d/%-m/%Y") in fecha_fila or fecha_sel.strftime("%d/%m/%Y") in fecha_fila
+        es_de_fecha = (f_str in fecha_fila) or (f_str_cero in fecha_fila)
         
         if estado == "FINALIZADO":
-            if es_hoy: terminados.append(item)
+            if es_de_fecha:
+                terminados.append(item)
             # Para el historial mensual
             try:
                 f_dt = datetime.strptime(fecha_fila.split()[0], "%d/%m/%Y")
-                if f_dt.month == ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].index(mes_hist) + 1:
+                meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+                if meses[f_dt.month-1] == mes_hist:
                     historial.append(item)
             except: pass
         else:
-            if es_hoy or (not tiene_fecha_futura and "202" in fecha_fila): # Simplificado para mostrar pendientes
+            # Si es de la fecha seleccionada o no tiene estado FINALIZADO, va a pendientes
+            if es_de_fecha or "202" in fecha_fila: 
                 pendientes.append(item)
 
     # --- TABS ---
@@ -163,32 +167,27 @@ def main():
             st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.subheader(f"Finalizados Hoy ({len(terminados)})")
+        st.subheader(f"Finalizados ({len(terminados)})")
         if terminados:
             df_t = pd.DataFrame(terminados)
-            st.dataframe(df_t[['ini', 'fin2', 'dom', 'mod', 'ase', 'tiempo']], use_container_width=True)
+            st.table(df_t[['ini', 'fin', 'dom', 'mod', 'ase']])
 
     with t2:
-        st.subheader("Indicadores del Día")
+        st.subheader("Indicadores")
         if terminados:
             df_kpi = pd.DataFrame(terminados)
             m1, m2, m3 = st.columns(3)
             m1.metric("Autos Lavados", len(df_kpi))
             m2.metric("Tiempo Promedio", f"{int(df_kpi['tiempo'].mean())} min")
             m3.metric("Controles OK", len(df_kpi[df_kpi['ok']]))
-            
-            fig = px.bar(df_kpi['ase'].value_counts(), title="Lavados por Asesor")
-            st.plotly_chart(fig)
-        else: st.info("Sin datos hoy.")
+        else: st.info("Sin datos para métricas.")
 
     with t3:
         st.subheader(f"Histórico {mes_hist}")
         if historial:
             df_h = pd.DataFrame(historial)
-            st.write(df_h[['fecha', 'dom', 'mod', 'tiempo']])
-            fig_evol = px.line(df_h.groupby('fecha').size().reset_index(name='Cantidad'), x='fecha', y='Cantidad', title="Evolución Mensual")
-            st.plotly_chart(fig_evol)
-        else: st.info("No hay datos para este mes.")
+            st.dataframe(df_h[['fecha', 'dom', 'mod', 'tiempo']], use_container_width=True)
+        else: st.info("No hay datos en el historial.")
 
 if __name__ == "__main__":
     main()
