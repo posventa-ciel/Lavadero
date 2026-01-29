@@ -34,12 +34,14 @@ st.markdown("""
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
-    
-    /* ESTILO TABLA HISTORIAL */
-    .hist-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; margin-top: 10px; }
-    .hist-table th { background-color: #f0f2f6; color: #00235d; text-align: left; padding: 8px; border-bottom: 2px solid #00235d; }
-    .hist-table td { padding: 8px; border-bottom: 1px solid #e0e0e0; }
-    .hist-table tr:hover { background-color: #f9f9f9; }
+
+    /* ESTILO TABLA HISTORIAL MEJORADO */
+    .hist-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin-top: 20px; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .hist-table thead { background-color: #00235d; color: white; }
+    .hist-table th { padding: 12px 15px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+    .hist-table td { padding: 12px 15px; border-bottom: 1px solid #f0f2f6; color: #444; font-size: 14px; }
+    .hist-table tr:last-child td { border-bottom: none; }
+    .hist-table tr:hover { background-color: #f8faff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -263,7 +265,7 @@ def main():
             ).reset_index()
             df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
 
-            # --- GRÁFICO COMBINADO ---
+            # --- GRÁFICO COMBINADO (Barras + Línea) ---
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos Lavados', marker_color='#00235d', yaxis='y'))
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio (min)', line=dict(color='#fbc02d', width=4), mode='lines+markers', yaxis='y2'))
@@ -277,31 +279,33 @@ def main():
             )
             st.plotly_chart(fig_hist, use_container_width=True)
 
-            # --- NUEVA TABLA MEJORADA (HTML) ---
-            st.markdown("### 📋 Detalle del Mes")
+            # --- TABLA HTML ESTILIZADA ---
+            st.markdown("### 📋 Detalle Mensual")
             
-            # Construimos la tabla en HTML para que sea profesional
-            html_table = f"""
+            # Construcción de la tabla HTML
+            html_table = """
             <table class="hist-table">
                 <thead>
                     <tr>
                         <th>FECHA</th>
-                        <th>CANTIDAD LAVADOS</th>
+                        <th>VEHÍCULOS LAVADOS</th>
                         <th>TIEMPO PROMEDIO</th>
                     </tr>
                 </thead>
                 <tbody>
             """
+            # Ordenamos por fecha descendente
             for _, row in df_m.sort_values('Fecha', ascending=False).iterrows():
                 html_table += f"""
                     <tr>
                         <td>{row['Fecha'].strftime('%d/%m/%Y')}</td>
-                        <td><b>{row['Lavados']}</b> vehículos</td>
+                        <td><b>{row['Lavados']}</b> unidades</td>
                         <td>{row['Promedio']:.1f} min</td>
                     </tr>
                 """
             html_table += "</tbody></table>"
             
+            # Renderizamos la tabla usando unsafe_allow_html=True
             st.markdown(html_table, unsafe_allow_html=True)
         else:
             st.warning("No hay historial disponible.")
