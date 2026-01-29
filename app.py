@@ -20,23 +20,15 @@ st.markdown("""
         margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
-    
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1.2 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 13px; }
-    .txt-truncado { 
-        color: #333; font-weight: 500; font-size: 12px; 
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
-        display: block; width: 100%;
-    }
+    .txt-truncado { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
-    
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
-    .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
     .badge-ok { background-color: #2e7d32; color: white; font-weight: bold; font-size: 11px; }
-
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
@@ -69,7 +61,7 @@ def limpiar_asesor(nombre):
     return partes[1] if len(partes) > 1 and partes[0].isdigit() else partes[0]
 
 def generar_badge_alerta(hora_prometida, now_dt):
-    if not hora_prometida or ":" not in str(hora_prometida): return f"<span class='badge-normal'>{hora_prometida}</span>"
+    if not hora_prometida or ":" not in str(hora_prometida): return f"<span>{hora_prometida}</span>"
     try:
         h, m = map(int, str(hora_prometida).split(':'))
         prometida_dt = now_dt.replace(hour=h, minute=m, second=0, microsecond=0)
@@ -77,8 +69,8 @@ def generar_badge_alerta(hora_prometida, now_dt):
         if diff < 0: return f"<div class='badge badge-red'>{hora_prometida}<br>DEMORADO</div>"
         elif diff <= 30: return f"<div class='badge badge-red'>{hora_prometida}<br>YA!</div>"
         elif diff <= 60: return f"<div class='badge badge-yellow'>{hora_prometida}<br>ATENCIÓN</div>"
-        return f"<span class='badge-normal'>{hora_prometida}</span>"
-    except: return f"<span class='badge-normal'>{hora_prometida}</span>"
+        return f"<b>{hora_prometida}</b>"
+    except: return f"<span>{hora_prometida}</span>"
 
 # --- 5. MAIN ---
 def main():
@@ -116,17 +108,11 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Determinar si está finalizado (lógica híbrida para manuales y sistema nuevo)
-        if estado in ["PAUSA", "REPASO"]:
-            es_finalizado = False
-        elif estado == "FINALIZADO":
-            es_finalizado = True
-        else:
-            es_finalizado = (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
-
+        # --- LÓGICA DE FINALIZADO IGUAL A TU CÓDIGO DE REFERENCIA ---
+        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
-        
-        # Detectar si es de días anteriores
+
+        # Detectar si es un auto atrasado
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -141,15 +127,12 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- LÓGICA DE CLASIFICACIÓN DEFINITIVA ---
+        # --- CLASIFICACIÓN USANDO LA LÓGICA QUE ME PASASTE ---
         if es_finalizado:
-            # Condición para que aparezca en Finalizados:
-            # Si es la fecha del turno O (si estamos viendo hoy y el auto era atrasado pero se finalizó hoy)
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
+            # Si es de la fecha elegida O (si es un atrasado que terminaste hoy estando en la vista de hoy)
+            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
         else:
-            # Condición para que aparezca en Pendientes:
-            # Si es la fecha del turno O si es un atrasado que todavía no se marcó como FINALIZADO
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
@@ -160,8 +143,8 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
-            h_pend = st.columns(cols_p)
-            h_pend[0].caption("ESTADO"); h_pend[1].caption("DOMINIO"); h_pend[2].caption("CLIENTE"); h_pend[3].caption("MODELO"); h_pend[4].caption("ASESOR"); h_pend[5].caption("ACCIONES")
+            h_p = st.columns(cols_p)
+            h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
 
             for p in pendientes:
                 with st.container():
@@ -202,14 +185,13 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>")
         st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
         if finalizados_ver:
-            # Ordenar por hora de inicio de lavado
             finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
             cols_f = [0.6, 0.6, 0.8, 1.4, 1.4, 0.8, 1.2]
-            h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("CLIENTE"); h[4].caption("MODELO"); h[5].caption("ASESOR"); h[6].caption("CONTROL")
+            h_f = st.columns(cols_f)
+            h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("DOM"); h_f[3].caption("CLIENTE"); h_f[4].caption("MODELO"); h_f[5].caption("ASESOR"); h_f[6].caption("ESTADO")
             for t in finalizados_ver:
                 with st.container():
                     r = st.columns(cols_f)
