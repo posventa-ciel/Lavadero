@@ -108,11 +108,11 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA FILTRADO DE PRECISIÓN ---
+        # --- LÓGICA DE FILTRADO ---
         es_de_hoy = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_hora_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
 
-        # Determinamos si es un auto de días anteriores
+        # Detectar atraso
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -127,20 +127,19 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- CLASIFICACIÓN CORREGIDA PARA CARGA MANUAL ---
-        # 1. ¿Va a PENDIENTES? 
-        # Si no tiene hora de fin (o está en pausa/repaso), es un pendiente (de hoy o atrasado).
+        # --- CLASIFICACIÓN ---
+        
+        # A PENDIENTES: Si no tiene hora de fin o está en pausa/repaso
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
             if es_de_hoy or es_atrasado:
                 pendientes.append(item)
         
-        # 2. ¿Va a FINALIZADOS?
+        # A FINALIZADOS: 
         else:
-            # MOSTRAR EN FINALIZADOS DE HOY SI:
-            # a) La fecha del turno en el Excel es HOY.
-            # b) O si el auto es atrasado PERO tiene una hora de fin cargada (sea manual o por App)
-            #    mientras estamos viendo la vista de "Hoy".
-            if es_de_hoy or (fecha_sel == hoy_date and es_atrasado):
+            # MOSTRAR SOLO SI:
+            # 1. El turno es de hoy (aquí entran los que cargues manual de hoy)
+            # 2. O el estado es "FINALIZADO" (aquí entran los atrasados que terminaste por App o manual poniendo la palabra)
+            if es_de_hoy or (estado == "FINALIZADO" and fecha_sel == hoy_date):
                 finalizados_ver.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
