@@ -141,17 +141,15 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- NUEVA LÓGICA DE CLASIFICACIÓN ---
+        # --- LÓGICA DE CLASIFICACIÓN DEFINITIVA ---
         if es_finalizado:
-            # Se muestra en finalizados si:
-            # 1. Es de la fecha seleccionada en el calendario.
-            # 2. O si estamos viendo "Hoy" y el auto era un atrasado que se terminó hoy (Estado FINALIZADO).
+            # Condición para que aparezca en Finalizados:
+            # Si es la fecha del turno O (si estamos viendo hoy y el auto era atrasado pero se finalizó hoy)
             if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
         else:
-            # Se muestra en pendientes si:
-            # 1. Es de la fecha seleccionada.
-            # 2. O si es un atrasado que aún no se terminó.
+            # Condición para que aparezca en Pendientes:
+            # Si es la fecha del turno O si es un atrasado que todavía no se marcó como FINALIZADO
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
