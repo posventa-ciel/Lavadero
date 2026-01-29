@@ -156,7 +156,17 @@ def main():
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
+            
+            # --- TÍTULOS AGREGADOS ---
             cols_p = [0.8, 0.8, 2, 0.8, 1.4]
+            h_pend = st.columns(cols_p)
+            h_pend[0].caption("ESTADO")
+            h_pend[1].caption("DOMINIO")
+            h_pend[2].caption("MODELO")
+            h_pend[3].caption("ASESOR")
+            h_pend[4].caption("ACCIONES")
+            # ------------------------
+
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
