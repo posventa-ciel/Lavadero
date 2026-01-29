@@ -108,10 +108,21 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA DE CLASIFICACIÓN ---
+        # --- LÓGICA DE CLASIFICACIÓN INTELIGENTE ---
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
         
-        # Detectar si es un auto atrasado
+        # 1. Detectamos si hay horas cargadas (sea por App o Manual)
+        tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
+
+        # 2. AUTOCORRECCIÓN: Si tiene hora de fin pero el estado está vacío (carga manual),
+        # lo tratamos como FINALIZADO virtualmente.
+        if tiene_fin and estado == "":
+            estado = "FINALIZADO"
+
+        # 3. Definimos si el auto está terminado
+        es_finalizado = (estado == "FINALIZADO")
+
+        # 4. Detectar si es un auto de días anteriores
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -126,15 +137,12 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # FINALIZADO: Si el estado dice "FINALIZADO" o tiene marcas manuales de fin
-        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
-
         if es_finalizado:
-            # MOSTRAR AQUÍ SI: Es de la fecha del calendario O es un finalizado de hoy (aunque sea atrasado)
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and estado == "FINALIZADO"):
+            # MOSTRAR EN FINALIZADOS SI: Es de hoy O era un atrasado que se terminó (manual o app)
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado):
                 finalizados_ver.append(item)
         else:
-            # PENDIENTES: Es de hoy o es un atrasado sin terminar
+            # MOSTRAR EN PENDIENTES SI: Es de hoy o es un atrasado sin terminar
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
