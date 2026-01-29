@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import json
 import pytz
+import plotly.express as px
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
@@ -108,11 +109,9 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA DE FILTRADO ---
         es_de_hoy = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_hora_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
 
-        # Detectar atraso
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -124,25 +123,17 @@ def main():
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
             "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
-            "min_orden": obtener_minutos_orden(fila[IDX_PRO])
+            "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda
         }
 
-        # --- CLASIFICACIÓN ---
-        
-        # A PENDIENTES: Si no tiene hora de fin o está en pausa/repaso
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
             if es_de_hoy or es_atrasado:
                 pendientes.append(item)
-        
-        # A FINALIZADOS: 
         else:
-            # MOSTRAR SOLO SI:
-            # 1. El turno es de hoy (aquí entran los que cargues manual de hoy)
-            # 2. O el estado es "FINALIZADO" (aquí entran los atrasados que terminaste por App o manual poniendo la palabra)
             if es_de_hoy or (estado == "FINALIZADO" and fecha_sel == hoy_date):
                 finalizados_ver.append(item)
 
-    tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
+    tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial"])
 
     with tab1:
         st.markdown(f"**Pendientes ({len(pendientes)})**")
@@ -209,19 +200,58 @@ def main():
                     with r[6]:
                         c_chk, c_txt = st.columns([0.3, 0.7])
                         with c_chk:
-                            # El checkbox para marcar que ya se entregó/revisó (OK)
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']:
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
-                        
                         with c_txt:
                             if t['ok']:
-                                # Si ya tiene el OK, queda en verde fijo
                                 st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
                             else:
-                                # Si NO tiene el OK, evaluamos cuánto falta para la entrega
-                                badge_calidad = generar_badge_alerta(t['pro'], now_dt)
-                                st.markdown(badge_calidad, unsafe_allow_html=True)
+                                st.markdown(generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+
+    with tab2:
+        st.subheader(f"Resumen de Hoy")
+        if finalizados_ver:
+            df_hoy = pd.DataFrame(finalizados_ver)
+            def calc_tiempo(row):
+                try:
+                    f = row['fin2'] if row['fin2'] else row['fin']
+                    return max(0, int((datetime.strptime(f, "%H:%M") - datetime.strptime(row['ini'], "%H:%M")).total_seconds() / 60))
+                except: return 0
+            df_hoy['minutos'] = df_hoy.apply(calc_tiempo, axis=1)
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Lavados", len(df_hoy))
+            c2.metric("Promedio", f"{int(df_hoy['minutos'].mean())} min")
+            c3.metric("Max Demora", f"{df_hoy['minutos'].max()} min")
+
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo por Vehículo"), use_container_width=True)
+            with col_g2:
+                st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
+        else:
+            st.info("Sin datos de hoy.")
+
+    with tab3:
+        st.subheader("Historial")
+        hist_list = []
+        for f in raw_data[1:]:
+            if len(f) >= 12 and f[IDX_FIN1] and f[IDX_INI1]:
+                try:
+                    f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                    h_f = f[IDX_FIN2] if f[IDX_FIN2] else f[IDX_FIN1]
+                    m = (datetime.strptime(h_f, "%H:%M") - datetime.strptime(f[IDX_INI1], "%H:%M")).total_seconds() / 60
+                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
+                except: continue
+        if hist_list:
+            df_h = pd.DataFrame(hist_list)
+            m_sel = st.selectbox("Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
+            st.line_chart(df_m.set_index('Fecha')['Lavados'])
+            st.table(df_m.assign(Fecha=df_m['Fecha'].dt.strftime('%d/%m/%Y')))
+        else: st.warning("Sin historial.")
 
 if __name__ == "__main__":
     main()
