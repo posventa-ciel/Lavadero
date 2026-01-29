@@ -34,14 +34,6 @@ st.markdown("""
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
     div[data-testid="column"] { padding: 0 !important; }
-
-    /* ESTILO TABLA HISTORIAL MEJORADO */
-    .hist-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin-top: 20px; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .hist-table thead { background-color: #00235d; color: white; }
-    .hist-table th { padding: 12px 15px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
-    .hist-table td { padding: 12px 15px; border-bottom: 1px solid #f0f2f6; color: #444; font-size: 14px; }
-    .hist-table tr:last-child td { border-bottom: none; }
-    .hist-table tr:hover { background-color: #f8faff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -258,51 +250,14 @@ def main():
         if hist_list:
             df_h = pd.DataFrame(hist_list)
             m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            
-            # Agrupamos y preparamos datos
-            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(
-                Lavados=('Fecha','count'), 
-                Promedio=('Mins','mean')
-            ).reset_index()
-            
-            # --- GRÁFICO ---
+            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
+
+            # Gráfico Combinado
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio min', line=dict(color='#fbc02d', width=4), yaxis='y2'))
             fig_hist.update_layout(
-                yaxis=dict(title="Cantidad"), 
-                yaxis2=dict(title="Minutos", overlaying="y", side="right"),
-                legend=dict(orientation="h", y=1.1),
-                margin=dict(l=0, r=0, t=30, b=0)
-            )
-            st.plotly_chart(fig_hist, use_container_width=True)
-
-            # --- TABLA CORREGIDA (Sin HTML problemático) ---
-            st.markdown("### 📋 Detalle del Mes")
-            
-            # Preparamos un DataFrame limpio para mostrar
-            df_mostrar = df_m.sort_values('Fecha', ascending=False).copy()
-            df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%d/%m/%Y')
-            df_mostrar['Promedio'] = df_mostrar['Promedio'].round(1).astype(str) + " min"
-            df_mostrar.columns = ['FECHA', 'VEHÍCULOS LAVADOS', 'TIEMPO PROMEDIO', 'BORRAR']
-            
-            # Mostramos la tabla usando el componente nativo que NO falla
-            st.dataframe(
-                df_mostrar[['FECHA', 'VEHÍCULOS LAVADOS', 'TIEMPO PROMEDIO']], 
-                use_container_width=True, 
-                hide_index=True # Esto quita los numeritos 0, 1, 2 de la izquierda
-            )
-        else:
-            st.warning("No hay historial disponible.")
-
-            # --- GRÁFICO COMBINADO (Barras + Línea) ---
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos Lavados', marker_color='#00235d', yaxis='y'))
-            fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio (min)', line=dict(color='#fbc02d', width=4), mode='lines+markers', yaxis='y2'))
-
-            fig_hist.update_layout(
-                title=f"Rendimiento Diario - {m_sel}",
                 yaxis=dict(title="Cantidad de Autos", side="left"),
                 yaxis2=dict(title="Minutos Promedio", overlaying="y", side="right", range=[0, df_m['Promedio'].max() + 20]),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -310,36 +265,13 @@ def main():
             )
             st.plotly_chart(fig_hist, use_container_width=True)
 
-            # --- TABLA HTML ESTILIZADA ---
-            st.markdown("### 📋 Detalle Mensual")
-            
-            # Construcción de la tabla HTML
-            html_table = """
-            <table class="hist-table">
-                <thead>
-                    <tr>
-                        <th>FECHA</th>
-                        <th>VEHÍCULOS LAVADOS</th>
-                        <th>TIEMPO PROMEDIO</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-            # Ordenamos por fecha descendente
-            for _, row in df_m.sort_values('Fecha', ascending=False).iterrows():
-                html_table += f"""
-                    <tr>
-                        <td>{row['Fecha'].strftime('%d/%m/%Y')}</td>
-                        <td><b>{row['Lavados']}</b> unidades</td>
-                        <td>{row['Promedio']:.1f} min</td>
-                    </tr>
-                """
-            html_table += "</tbody></table>"
-            
-            # Renderizamos la tabla usando unsafe_allow_html=True
-            st.markdown(html_table, unsafe_allow_html=True)
+            st.markdown("### 📋 Detalle del Mes")
+            df_table = df_m.sort_values('Fecha', ascending=False).copy()
+            df_table['Fecha'] = df_table['Fecha'].dt.strftime('%d/%m/%Y')
+            df_table['Promedio'] = df_table['Promedio'].round(1).astype(str) + " min"
+            st.dataframe(df_table[['Fecha', 'Lavados', 'Promedio']], use_container_width=True, hide_index=True)
         else:
-            st.warning("No hay historial disponible.")
+            st.warning("Sin datos para el historial.")
 
 if __name__ == "__main__":
     main()
