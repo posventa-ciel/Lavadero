@@ -10,7 +10,7 @@ import plotly.express as px
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS (ULTRA COMPACTO RECUPERADO) ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem !important; padding-bottom: 1rem !important; }
@@ -22,14 +22,12 @@ st.markdown("""
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
     
-    /* FILAS COMPACTAS REINSTALADAS */
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
     .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
-    /* BADGES DE SEMAFORO */
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
@@ -121,9 +119,15 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Un auto está finalizado SOLO si el estado es FINALIZADO
-        # Esto evita que al poner PAUSA (que llena FIN1) desaparezca de la lista
-        es_finalizado = (estado == "FINALIZADO")
+        # --- LÓGICA DE ESTADO (MEJORADA) ---
+        if estado in ["PAUSA", "REPASO"]:
+            es_finalizado = False
+        elif estado == "FINALIZADO":
+            es_finalizado = True
+        else:
+            # Caso para datos manuales o antiguos
+            es_finalizado = (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
+
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
         # Detectar atraso
@@ -141,13 +145,10 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA ---
         if es_finalizado:
-            # Si estoy viendo hoy, incluyo los de fecha hoy O los que estaban atrasados pero se terminaron
             if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
                 terminados_hoy.append(item)
         else:
-            # En pendientes va lo de hoy o lo que viene atrasado y sigue sin terminarse
             if es_de_fecha or es_atrasado:
                 pendientes.append(item)
 
@@ -158,7 +159,7 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             
-            # --- TÍTULOS AGREGADOS ---
+            # TÍTULOS DE COLUMNAS
             cols_p = [0.8, 0.8, 2, 0.8, 1.4]
             h_pend = st.columns(cols_p)
             h_pend[0].caption("ESTADO")
@@ -166,22 +167,30 @@ def main():
             h_pend[2].caption("MODELO")
             h_pend[3].caption("ASESOR")
             h_pend[4].caption("ACCIONES")
-            # ------------------------
 
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
+                    
+                    # Definición de Badge según estado
+                    if p['est'] == "PAUSA":
+                        badge = f"<div class='badge' style='background-color: #6c757d; color: white;'>{p['pro']}<br>PAUSADO</div>"
+                    elif p['est'] == "REPASO":
+                        badge = f"<div class='badge' style='background-color: #17a2b8; color: white;'>{p['pro']}<br>REPASO</div>"
+                    else:
+                        badge = f<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
+                    
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
                     c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
+                    
                     with c[4]:
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        elif p['ini'] and not p['fin']:
+                        elif p['ini'] and (p['est'] not in ["PAUSA", "REPASO", "FINALIZADO"]):
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
@@ -190,13 +199,14 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                         elif p['est'] == "PAUSA":
-                            if st.button("🔄", key=f"r{p['fila']}"):
+                            if st.button("🔄", key=f"r{p['fila']}", help="Iniciar Repaso"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
                         elif p['est'] == "REPASO":
-                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar repaso"):
+                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
+                                
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -205,7 +215,7 @@ def main():
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
             cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
             h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("CONTROL CALIDAD")
+            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("ESTADO")
             for t in terminados_hoy:
                 with st.container():
                     r = st.columns(cols_f)
@@ -220,7 +230,7 @@ def main():
                             if nk != t['ok']:
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
                         with c_txt:
-                            st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
+                            st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else "<span class='badge-normal'>TERMINADO</span>", unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
