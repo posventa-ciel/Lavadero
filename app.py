@@ -5,15 +5,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import json
 import pytz
-import plotly.express as px
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS ---
+# --- 2. ESTILOS CSS ACTUALIZADOS ---
 st.markdown("""
 <style>
-    .block-container { padding-top: 2rem !important; padding-bottom: 1rem !important; }
+    .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
     .header-box {
         background: linear-gradient(90deg, #00235d 0%, #001538 100%);
         padding: 15px 20px; border-radius: 8px; color: white;
@@ -22,10 +21,15 @@ st.markdown("""
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
     
-    .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1 !important; }
+    .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1.2 !important; }
     p { margin: 0 !important; }
-    .txt-patente { color: #00235d; font-weight: 700; font-size: 14px; }
-    .txt-modelo { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .txt-patente { color: #00235d; font-weight: 700; font-size: 13px; }
+    /* TEXTO TRUNCADO PARA CLIENTE Y MODELO */
+    .txt-truncado { 
+        color: #333; font-weight: 500; font-size: 12px; 
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+        display: block; width: 100%;
+    }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
     
     .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
@@ -53,12 +57,6 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def calcular_minutos(h1, h2):
-    try:
-        fmt = "%H:%M"
-        return int((datetime.strptime(h2, fmt) - datetime.strptime(h1, fmt)).total_seconds() / 60)
-    except: return 0
-
 def obtener_minutos_orden(hora_str):
     if not hora_str or ":" not in str(hora_str): return 99999
     try:
@@ -96,7 +94,8 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
-    IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 0, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13
+    # INDICES DE COLUMNAS (Asegúrate que IDX_CLI sea el correcto para CLIENTE)
+    IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13
 
     with st.sidebar:
         st.markdown("### 🔍 Buscar Patente")
@@ -119,18 +118,14 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA DE ESTADO (MEJORADA) ---
         if estado in ["PAUSA", "REPASO"]:
             es_finalizado = False
         elif estado == "FINALIZADO":
             es_finalizado = True
         else:
-            # Caso para datos manuales o antiguos
             es_finalizado = (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
 
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
-        
-        # Detectar atraso
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -138,7 +133,7 @@ def main():
         except: pass
 
         item = {
-            "fila": i, "dom": dom, "mod": fila[IDX_MOD], "ase": limpiar_asesor(fila[IDX_ASE]),
+            "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
             "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
@@ -159,34 +154,33 @@ def main():
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             
-            # TÍTULOS DE COLUMNAS
-            cols_p = [0.8, 0.8, 2, 0.8, 1.4]
+            # AJUSTE DE COLUMNAS: Se agrega espacio para CLIENTE
+            cols_p = [0.8, 0.8, 1.2, 1.2, 0.8, 1.2]
             h_pend = st.columns(cols_p)
             h_pend[0].caption("ESTADO")
             h_pend[1].caption("DOMINIO")
-            h_pend[2].caption("MODELO")
-            h_pend[3].caption("ASESOR")
-            h_pend[4].caption("ACCIONES")
+            h_pend[2].caption("CLIENTE")
+            h_pend[3].caption("MODELO")
+            h_pend[4].caption("ASESOR")
+            h_pend[5].caption("ACCIONES")
 
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    
-                    # Definición de Badge según estado
                     if p['est'] == "PAUSA":
                         badge = f"<div class='badge' style='background-color: #6c757d; color: white;'>{p['pro']}<br>PAUSADO</div>"
                     elif p['est'] == "REPASO":
                         badge = f"<div class='badge' style='background-color: #17a2b8; color: white;'>{p['pro']}<br>REPASO</div>"
                     else:
-                        # AQUÍ ESTABA EL ERROR (Faltaba la comilla después de la f)
                         badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
                     
                     c[0].markdown(badge, unsafe_allow_html=True)
                     c[1].markdown(f"<span class='txt-patente'>{p['dom']}</span>", unsafe_allow_html=True)
-                    c[2].markdown(f"<span class='txt-modelo'>{p['mod']}</span>", unsafe_allow_html=True)
-                    c[3].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
+                    c[2].markdown(f"<span class='txt-truncado'>{p['cli']}</span>", unsafe_allow_html=True)
+                    c[3].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
+                    c[4].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     
-                    with c[4]:
+                    with c[5]:
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
@@ -200,11 +194,11 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                         elif p['est'] == "PAUSA":
-                            if st.button("🔄", key=f"r{p['fila']}", help="Iniciar Repaso"):
+                            if st.button("🔄", key=f"r{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
                         elif p['est'] == "REPASO":
-                            if st.button("🏁", key=f"f2{p['fila']}", help="Finalizar"):
+                            if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                                 
@@ -214,17 +208,18 @@ def main():
         st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
         if terminados_hoy:
             terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
-            cols_f = [0.6, 0.6, 0.8, 1.5, 0.8, 1.2]
+            cols_f = [0.6, 0.6, 0.8, 1.2, 1.2, 0.8, 1.2]
             h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("MODELO"); h[4].caption("ASESOR"); h[5].caption("ESTADO")
+            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("CLIENTE"); h[4].caption("MODELO"); h[5].caption("ASESOR"); h[6].caption("ESTADO")
             for t in terminados_hoy:
                 with st.container():
                     r = st.columns(cols_f)
                     r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin'])
                     r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
-                    r[3].markdown(f"<span class='txt-modelo'>{t['mod']}</span>", unsafe_allow_html=True)
-                    r[4].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
-                    with r[5]:
+                    r[3].markdown(f"<span class='txt-truncado'>{t['cli']}</span>", unsafe_allow_html=True)
+                    r[4].markdown(f"<span class='txt-truncado'>{t['mod']}</span>", unsafe_allow_html=True)
+                    r[5].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
+                    with r[6]:
                         c_chk, c_txt = st.columns([0.3, 0.7])
                         with c_chk:
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
