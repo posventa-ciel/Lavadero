@@ -108,10 +108,9 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA DE FINALIZADO IGUAL A TU CÓDIGO DE REFERENCIA ---
-        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
+        # --- LÓGICA DE CLASIFICACIÓN ---
         es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
-
+        
         # Detectar si es un auto atrasado
         es_atrasado = False
         try:
@@ -127,12 +126,15 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- CLASIFICACIÓN USANDO LA LÓGICA QUE ME PASASTE ---
+        # FINALIZADO: Si el estado dice "FINALIZADO" o tiene marcas manuales de fin
+        es_finalizado = (estado == "FINALIZADO" or fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != "")
+
         if es_finalizado:
-            # Si es de la fecha elegida O (si es un atrasado que terminaste hoy estando en la vista de hoy)
-            if es_de_fecha_seleccionada or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
+            # MOSTRAR AQUÍ SI: Es de la fecha del calendario O es un finalizado de hoy (aunque sea atrasado)
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
         else:
+            # PENDIENTES: Es de hoy o es un atrasado sin terminar
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
@@ -185,7 +187,7 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<br>")
+        st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
         st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
         if finalizados_ver:
             finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
