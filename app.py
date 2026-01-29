@@ -121,8 +121,9 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # Un auto está finalizado si el estado dice FINALIZADO o tiene marcas de fin
-        es_finalizado = (estado == "FINALIZADO") or (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
+        # Un auto está finalizado SOLO si el estado es FINALIZADO
+        # Esto evita que al poner PAUSA (que llena FIN1) desaparezca de la lista
+        es_finalizado = (estado == "FINALIZADO")
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         
         # Detectar atraso
