@@ -259,11 +259,42 @@ def main():
             df_h = pd.DataFrame(hist_list)
             m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
             
+            # Agrupamos y preparamos datos
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(
                 Lavados=('Fecha','count'), 
                 Promedio=('Mins','mean')
             ).reset_index()
+            
+            # --- GRÁFICO ---
             df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
+            fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio min', line=dict(color='#fbc02d', width=4), yaxis='y2'))
+            fig_hist.update_layout(
+                yaxis=dict(title="Cantidad"), 
+                yaxis2=dict(title="Minutos", overlaying="y", side="right"),
+                legend=dict(orientation="h", y=1.1),
+                margin=dict(l=0, r=0, t=30, b=0)
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+            # --- TABLA CORREGIDA (Sin HTML problemático) ---
+            st.markdown("### 📋 Detalle del Mes")
+            
+            # Preparamos un DataFrame limpio para mostrar
+            df_mostrar = df_m.sort_values('Fecha', ascending=False).copy()
+            df_mostrar['Fecha'] = df_mostrar['Fecha'].dt.strftime('%d/%m/%Y')
+            df_mostrar['Promedio'] = df_mostrar['Promedio'].round(1).astype(str) + " min"
+            df_mostrar.columns = ['FECHA', 'VEHÍCULOS LAVADOS', 'TIEMPO PROMEDIO', 'BORRAR']
+            
+            # Mostramos la tabla usando el componente nativo que NO falla
+            st.dataframe(
+                df_mostrar[['FECHA', 'VEHÍCULOS LAVADOS', 'TIEMPO PROMEDIO']], 
+                use_container_width=True, 
+                hide_index=True # Esto quita los numeritos 0, 1, 2 de la izquierda
+            )
+        else:
+            st.warning("No hay historial disponible.")
 
             # --- GRÁFICO COMBINADO (Barras + Línea) ---
             fig_hist = go.Figure()
