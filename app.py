@@ -209,12 +209,19 @@ def main():
                     with r[6]:
                         c_chk, c_txt = st.columns([0.3, 0.7])
                         with c_chk:
+                            # El checkbox para marcar que ya se entregó/revisó (OK)
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']:
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
+                        
                         with c_txt:
-                            st.markdown("<span class='badge badge-ok'>OK</span>" if t['ok'] else "-", unsafe_allow_html=True)
-                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+                            if t['ok']:
+                                # Si ya tiene el OK, queda en verde fijo
+                                st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            else:
+                                # Si NO tiene el OK, evaluamos cuánto falta para la entrega
+                                badge_calidad = generar_badge_alerta(t['pro'], now_dt)
+                                st.markdown(badge_calidad, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
