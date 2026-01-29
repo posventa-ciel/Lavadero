@@ -137,9 +137,10 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        if es_finalizado:
-            # MOSTRAR EN FINALIZADOS SI: Es de hoy O era un atrasado que se terminó (manual o app)
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado):
+       if es_finalizado:
+            # MOSTRAR SOLO SI: Es la fecha del turno que elegiste
+            # O si el auto se marcó como FINALIZADO hoy específicamente (vía botón App)
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
         else:
             # MOSTRAR EN PENDIENTES SI: Es de hoy o es un atrasado sin terminar
