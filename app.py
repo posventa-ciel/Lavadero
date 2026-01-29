@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import pytz
 import plotly.express as px
+import plotly.graph_objects as go
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
@@ -235,7 +236,7 @@ def main():
             st.info("Sin datos de hoy.")
 
     with tab3:
-        st.subheader("Historial")
+        st.subheader("Historial de Lavados")
         hist_list = []
         for f in raw_data[1:]:
             if len(f) >= 12 and f[IDX_FIN1] and f[IDX_INI1]:
@@ -245,13 +246,59 @@ def main():
                     m = (datetime.strptime(h_f, "%H:%M") - datetime.strptime(f[IDX_INI1], "%H:%M")).total_seconds() / 60
                     hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
                 except: continue
+        
         if hist_list:
             df_h = pd.DataFrame(hist_list)
-            m_sel = st.selectbox("Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
-            st.line_chart(df_m.set_index('Fecha')['Lavados'])
-            st.table(df_m.assign(Fecha=df_m['Fecha'].dt.strftime('%d/%m/%Y')))
-        else: st.warning("Sin historial.")
+            # Selector de mes
+            m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(
+                Lavados=('Fecha','count'), 
+                Promedio=('Mins','mean')
+            ).reset_index()
+            df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
+
+            # --- GRÁFICO MEJORADO (BARRAS + LÍNEA) ---
+            fig_hist = go.Figure()
+
+            # Barras para cantidad de lavados
+            fig_hist.add_trace(go.Bar(
+                x=df_m['Fecha_str'],
+                y=df_m['Lavados'],
+                name='Autos Lavados',
+                marker_color='#00235d',
+                yaxis='y'
+            ))
+
+            # Línea para tiempo promedio
+            fig_hist.add_trace(go.Scatter(
+                x=df_m['Fecha_str'],
+                y=df_m['Promedio'],
+                name='Promedio (min)',
+                line=dict(color='#fbc02d', width=4),
+                mode='lines+markers',
+                yaxis='y2'
+            ))
+
+            # Configuración de ejes dobles
+            fig_hist.update_layout(
+                title=f"Rendimiento Diario - {m_sel}",
+                xaxis=dict(title="Día"),
+                yaxis=dict(title="Cantidad de Autos", side="left"),
+                yaxis2=dict(title="Minutos Promedio", overlaying="y", side="right", range=[0, df_m['Promedio'].max() + 20]),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hovermode="x unified"
+            )
+
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+            # Tabla resumen debajo
+            st.markdown("**Detalle diario del mes:**")
+            st.table(df_m[['Fecha', 'Lavados', 'Promedio']].assign(
+                Fecha=df_m['Fecha'].dt.strftime('%d/%m/%Y'),
+                Promedio=df_m['Promedio'].round(1).astype(str) + " min"
+            ))
+        else:
+            st.warning("No hay datos suficientes en el historial.")
 
 if __name__ == "__main__":
     main()
