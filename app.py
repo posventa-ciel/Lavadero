@@ -127,19 +127,20 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        # --- CLASIFICACIÓN ---
+        # --- CLASIFICACIÓN CORREGIDA PARA CARGA MANUAL ---
         # 1. ¿Va a PENDIENTES? 
-        # Si es de hoy o atrasado Y NO tiene hora de fin (o está en pausa/repaso)
+        # Si no tiene hora de fin (o está en pausa/repaso), es un pendiente (de hoy o atrasado).
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
             if es_de_hoy or es_atrasado:
                 pendientes.append(item)
         
         # 2. ¿Va a FINALIZADOS?
         else:
-            # MOSTRAR SOLO SI:
-            # a) Es un auto cuya fecha de ingreso es HOY.
-            # b) O es un auto de antes pero se finalizó usando el botón de la APP (Estado FINALIZADO).
-            if es_de_hoy or (estado == "FINALIZADO" and fecha_sel == hoy_date):
+            # MOSTRAR EN FINALIZADOS DE HOY SI:
+            # a) La fecha del turno en el Excel es HOY.
+            # b) O si el auto es atrasado PERO tiene una hora de fin cargada (sea manual o por App)
+            #    mientras estamos viendo la vista de "Hoy".
+            if es_de_hoy or (fecha_sel == hoy_date and es_atrasado):
                 finalizados_ver.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
