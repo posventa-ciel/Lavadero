@@ -87,6 +87,7 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
+    # IDX_CTRL corresponde a la columna N (Indice 13)
     IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13
 
     with st.sidebar:
@@ -119,11 +120,14 @@ def main():
             if f_dt < fecha_sel: es_atrasado = True
         except: pass
 
+        # Un auto tiene el OK si en la columna N dice "SI" o "OK"
+        es_ok = fila[IDX_CTRL].strip().upper() in ["SI", "OK"]
+
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-            "ok": (fila[IDX_CTRL].strip().upper() == "OK"), "atr": es_atrasado,
+            "ok": es_ok, "atr": es_atrasado,
             "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda
         }
 
@@ -201,9 +205,10 @@ def main():
                     with r[6]:
                         c_chk, c_txt = st.columns([0.3, 0.7])
                         with c_chk:
+                            # Al tildar, escribimos "SI" en la columna N del sheet
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']:
-                                hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
+                                hoja.update_cell(t['fila'], IDX_CTRL + 1, "SI" if nk else ""); st.rerun()
                         with c_txt:
                             if t['ok']:
                                 st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
@@ -253,7 +258,6 @@ def main():
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
 
-            # Gráfico Combinado
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio min', line=dict(color='#fbc02d', width=4), yaxis='y2'))
