@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import pytz
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- 2. ESTILOS CSS ACTUALIZADOS ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
     .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
@@ -24,7 +24,6 @@ st.markdown("""
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1.2 !important; }
     p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 13px; }
-    /* TEXTO TRUNCADO PARA CLIENTE Y MODELO */
     .txt-truncado { 
         color: #333; font-weight: 500; font-size: 12px; 
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
@@ -36,7 +35,7 @@ st.markdown("""
     .badge-red { background-color: #d32f2f; color: white; }
     .badge-yellow { background-color: #fbc02d; color: black; }
     .badge-normal { color: #333; font-weight: bold; font-size: 13px; }
-    .badge-ok { color: #2e7d32; font-weight: bold; font-size: 12px; }
+    .badge-ok { background-color: #2e7d32; color: white; font-weight: bold; font-size: 11px; }
 
     .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
@@ -94,7 +93,6 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
-    # INDICES DE COLUMNAS (Asegúrate que IDX_CLI sea el correcto para CLIENTE)
     IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13
 
     with st.sidebar:
@@ -105,7 +103,7 @@ def main():
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
 
-    pendientes, terminados_hoy = [], []
+    pendientes, finalizados_ver = [], []
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 14: fila += [""] * (14 - len(fila))
@@ -118,6 +116,7 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
+        # Determinar si está finalizado (lógica híbrida para manuales y sistema nuevo)
         if estado in ["PAUSA", "REPASO"]:
             es_finalizado = False
         elif estado == "FINALIZADO":
@@ -125,7 +124,9 @@ def main():
         else:
             es_finalizado = (fila[IDX_FIN1].strip() != "") or (fila[IDX_FIN2].strip() != "")
 
-        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
+        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
+        
+        # Detectar si es de días anteriores
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -140,11 +141,18 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
+        # --- NUEVA LÓGICA DE CLASIFICACIÓN ---
         if es_finalizado:
-            if es_de_fecha or (es_atrasado and fecha_sel == hoy_date and estado == "FINALIZADO"):
-                terminados_hoy.append(item)
+            # Se muestra en finalizados si:
+            # 1. Es de la fecha seleccionada en el calendario.
+            # 2. O si estamos viendo "Hoy" y el auto era un atrasado que se terminó hoy (Estado FINALIZADO).
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
+                finalizados_ver.append(item)
         else:
-            if es_de_fecha or es_atrasado:
+            # Se muestra en pendientes si:
+            # 1. Es de la fecha seleccionada.
+            # 2. O si es un atrasado que aún no se terminó.
+            if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
@@ -153,16 +161,9 @@ def main():
         st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
             pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
-            
-            # AJUSTE DE COLUMNAS: Se agrega espacio para CLIENTE
-            cols_p = [0.8, 0.8, 1.2, 1.2, 0.8, 1.2]
+            cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
             h_pend = st.columns(cols_p)
-            h_pend[0].caption("ESTADO")
-            h_pend[1].caption("DOMINIO")
-            h_pend[2].caption("CLIENTE")
-            h_pend[3].caption("MODELO")
-            h_pend[4].caption("ASESOR")
-            h_pend[5].caption("ACCIONES")
+            h_pend[0].caption("ESTADO"); h_pend[1].caption("DOMINIO"); h_pend[2].caption("CLIENTE"); h_pend[3].caption("MODELO"); h_pend[4].caption("ASESOR"); h_pend[5].caption("ACCIONES")
 
             for p in pendientes:
                 with st.container():
@@ -201,17 +202,17 @@ def main():
                             if st.button("🏁", key=f"f2{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO"); st.rerun()
-                                
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"**Finalizados ({len(terminados_hoy)})**")
-        if terminados_hoy:
-            terminados_hoy.sort(key=lambda x: obtener_minutos_orden(x['ini']))
-            cols_f = [0.6, 0.6, 0.8, 1.2, 1.2, 0.8, 1.2]
+        st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
+        if finalizados_ver:
+            # Ordenar por hora de inicio de lavado
+            finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
+            cols_f = [0.6, 0.6, 0.8, 1.4, 1.4, 0.8, 1.2]
             h = st.columns(cols_f)
-            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("CLIENTE"); h[4].caption("MODELO"); h[5].caption("ASESOR"); h[6].caption("ESTADO")
-            for t in terminados_hoy:
+            h[0].caption("INI"); h[1].caption("FIN"); h[2].caption("DOM"); h[3].caption("CLIENTE"); h[4].caption("MODELO"); h[5].caption("ASESOR"); h[6].caption("CONTROL")
+            for t in finalizados_ver:
                 with st.container():
                     r = st.columns(cols_f)
                     r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin'])
@@ -226,7 +227,7 @@ def main():
                             if nk != t['ok']:
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "OK" if nk else ""); st.rerun()
                         with c_txt:
-                            st.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else "<span class='badge-normal'>TERMINADO</span>", unsafe_allow_html=True)
+                            st.markdown("<span class='badge badge-ok'>OK</span>" if t['ok'] else "-", unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
