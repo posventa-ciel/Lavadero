@@ -108,21 +108,11 @@ def main():
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
         
-        # --- LÓGICA DE CLASIFICACIÓN INTELIGENTE ---
-        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
-        
-        # 1. Detectamos si hay horas cargadas (sea por App o Manual)
-        tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
+        # --- LÓGICA FILTRADO DE PRECISIÓN ---
+        es_de_hoy = (f_str in f_celda) or (f_str_cero in f_celda)
+        tiene_hora_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
 
-        # 2. AUTOCORRECCIÓN: Si tiene hora de fin pero el estado está vacío (carga manual),
-        # lo tratamos como FINALIZADO virtualmente.
-        if tiene_fin and estado == "":
-            estado = "FINALIZADO"
-
-        # 3. Definimos si el auto está terminado
-        es_finalizado = (estado == "FINALIZADO")
-
-        # 4. Detectar si es un auto de días anteriores
+        # Determinamos si es un auto de días anteriores
         es_atrasado = False
         try:
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
@@ -137,15 +127,20 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO])
         }
 
-        if es_finalizado:
-            # MOSTRAR SOLO SI: Es la fecha del turno que elegiste
-            # O si el auto se marcó como FINALIZADO hoy específicamente (vía botón App)
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
-                finalizados_ver.append(item)
-        else:
-            # MOSTRAR EN PENDIENTES SI: Es de hoy o es un atrasado sin terminar
-            if es_de_fecha_seleccionada or es_atrasado:
+        # --- CLASIFICACIÓN ---
+        # 1. ¿Va a PENDIENTES? 
+        # Si es de hoy o atrasado Y NO tiene hora de fin (o está en pausa/repaso)
+        if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
+            if es_de_hoy or es_atrasado:
                 pendientes.append(item)
+        
+        # 2. ¿Va a FINALIZADOS?
+        else:
+            # MOSTRAR SOLO SI:
+            # a) Es un auto cuya fecha de ingreso es HOY.
+            # b) O es un auto de antes pero se finalizó usando el botón de la APP (Estado FINALIZADO).
+            if es_de_hoy or (estado == "FINALIZADO" and fecha_sel == hoy_date):
+                finalizados_ver.append(item)
 
     tab1, tab2 = st.tabs(["🚗 Operación", "📊 Métricas"])
 
