@@ -8,10 +8,10 @@ import pytz
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Gestión Lavadero y Taller", layout="wide")
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
-# --- ESTILOS CSS ---
+# --- 2. ESTILOS CSS ---
 st.markdown("""
 <style>
     .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
@@ -23,13 +23,21 @@ st.markdown("""
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1.2 !important; }
-    .status-badge { padding: 3px 8px; border-radius: 5px; font-weight: bold; font-size: 12px; }
-    .bg-danger { background-color: #f8d7da; color: #721c24; }
-    .badge-ok { background-color: #2e7d32; color: white; font-weight: bold; font-size: 11px; padding: 3px 6px; border-radius: 4px; }
+    p { margin: 0 !important; }
+    .txt-patente { color: #00235d; font-weight: 700; font-size: 13px; }
+    .txt-truncado { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; }
+    .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
+    .badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; min-width: 70px; display: inline-block; line-height: 1.1; }
+    .badge-red { background-color: #d32f2f; color: white; }
+    .badge-yellow { background-color: #fbc02d; color: black; }
+    .badge-ok { background-color: #2e7d32; color: white; font-weight: bold; font-size: 11px; }
+    .stButton button { height: 24px !important; min-height: 24px !important; font-size: 11px !important; padding: 0 8px !important; margin: 1px 0 !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0rem !important; }
+    div[data-testid="column"] { padding: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CONEXIÓN ---
+# --- 3. CONEXIÓN ---
 def conectar_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -41,7 +49,14 @@ def conectar_sheet():
     except Exception as e:
         st.error(f"Error conectando: {e}"); return None
 
-# --- 3. FUNCIONES AUXILIARES ---
+# --- 4. FUNCIONES AUXILIARES ---
+def obtener_minutos_orden(hora_str):
+    if not hora_str or ":" not in str(hora_str): return 99999
+    try:
+        h, m = map(int, str(hora_str).split(':'))
+        return h * 60 + m
+    except: return 99999
+
 def limpiar_asesor(nombre):
     if not nombre: return ""
     partes = nombre.split()
@@ -65,13 +80,13 @@ def generar_badge_alerta(hora_prometida, now_dt):
         h, m = map(int, str(hora_prometida).split(':'))
         prometida_dt = now_dt.replace(hour=h, minute=m, second=0, microsecond=0)
         diff = (prometida_dt - now_dt).total_seconds() / 60
-        if diff < 0: return f"<div class='badge' style='background-color:#d32f2f;color:white;padding:3px;border-radius:4px;'>{hora_prometida}<br>DEMORADO</div>"
-        elif diff <= 30: return f"<div class='badge' style='background-color:#d32f2f;color:white;padding:3px;border-radius:4px;'>{hora_prometida}<br>YA!</div>"
-        elif diff <= 60: return f"<div class='badge' style='background-color:#fbc02d;color:black;padding:3px;border-radius:4px;'>{hora_prometida}<br>ATENCIÓN</div>"
+        if diff < 0: return f"<div class='badge badge-red'>{hora_prometida}<br>DEMORADO</div>"
+        elif diff <= 30: return f"<div class='badge badge-red'>{hora_prometida}<br>YA!</div>"
+        elif diff <= 60: return f"<div class='badge badge-yellow'>{hora_prometida}<br>ATENCIÓN</div>"
         return f"<b>{hora_prometida}</b>"
     except: return f"<span>{hora_prometida}</span>"
 
-# --- 4. MAIN ---
+# --- 5. MAIN ---
 def main():
     tz_ar = pytz.timezone('America/Argentina/Buenos_Aires')
     now_dt = datetime.now(tz_ar)
@@ -79,148 +94,176 @@ def main():
     hoy_date = now_dt.date()
     hoy_str = hoy_date.strftime("%d/%m/%Y")
 
-    st.markdown(f'<div class="header-box"><div class="header-title">CONTROL DE EFICIENCIA TALLER</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
     raw_data = hoja.get_all_values()
 
-    # ÍNDICES
-    # 0:Fecha, 1:Ingreso_DMS (Col B), 2:Asesor, 3:Dom, 4:Modelo, 5:Cliente, 7:Prometido, 12:Estado, 13:OK (Col N), 14:Fecha_Fin (Col O), 15:Recuperado (Col P)
-    IDX_FECHA, IDX_ING_DMS, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL, IDX_FECHA_FIN, IDX_RECUPERO = 0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    # IDX_FECHA_FIN es la columna O (Indice 14)
+    IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL, IDX_FECHA_FIN = 0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14
 
     with st.sidebar:
-        st.title("⚙️ Filtros")
-        fecha_sel = st.date_input("Fecha a consultar:", hoy_date)
+        st.markdown("### 🔍 Buscar Patente")
+        busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
+        st.markdown("---")
+        fecha_sel = st.date_input("Ver fecha:", hoy_date)
         f_str = fecha_sel.strftime("%-d/%-m/%Y")
         f_str_cero = fecha_sel.strftime("%d/%m/%Y")
-        st.markdown("---")
-        busqueda = st.text_input("Buscar Patente:").upper()
 
-    pendientes, finalizados_ver, turnos_eficiencia = [], [], []
+    pendientes, finalizados_ver = [], []
 
     for i, fila in enumerate(raw_data[1:], start=2):
-        if len(fila) < 16: fila += [""] * (16 - len(fila))
-        
-        f_celda = fila[IDX_FECHA]
-        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
-        if not es_de_fecha: continue
-
+        if len(fila) < 15: fila += [""] * (15 - len(fila))
         dom = fila[IDX_DOM].upper()
-        if not dom: continue
+        pro_raw = fila[IDX_PRO].upper()
+        
+        if not dom or any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
-        # --- LÓGICA DE TURNOS ---
-        hora_b = fila[IDX_ING_DMS].strip()
-        prometido = fila[IDX_PRO].upper()
-        modelo = fila[IDX_MOD].upper()
-        
-        # Solo sumamos a la estadística si Columna B tiene algo
-        if hora_b != "":
-            es_paracaidista = (hora_b == "13:00")
-            es_dms = not es_paracaidista
-            vino = not ("NO VINO" in prometido or "NO VINO" in modelo)
-            es_mantenimiento = any(x in modelo for x in ["SERV", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"])
-
-            turnos_eficiencia.append({
-                "fila": i, "dom": dom, "asesor": limpiar_asesor(fila[IDX_ASE]),
-                "programado": es_dms, "adicional": es_paracaidista, "vino": vino, 
-                "mantenimiento": es_mantenimiento, "recuperado": fila[IDX_RECUPERO].strip().upper() == "SI"
-            })
-
-        # --- LÓGICA LAVADERO ---
+        f_celda = fila[IDX_FECHA]
+        f_fin_celda = fila[IDX_FECHA_FIN]
         estado = fila[IDX_EST].strip().upper()
+        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_hora_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
-        item_lav = {
+
+        es_atrasado = False
+        try:
+            f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
+            if f_dt < fecha_sel: es_atrasado = True
+        except: pass
+
+        item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro": fila[IDX_PRO], "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], "est": estado, 
-            "ok": fila[IDX_CTRL].strip().upper() in ["SI", "OK"], "fecha_fin_real": fila[IDX_FECHA_FIN]
+            "ok": fila[IDX_CTRL].strip().upper() in ["SI", "OK"], "atr": es_atrasado,
+            "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda, "fecha_fin_real": f_fin_celda
         }
 
+        # --- CLASIFICACIÓN CON FILTRO DE FECHA DE FINALIZACIÓN ---
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
-            pendientes.append(item_lav)
+            if es_de_fecha_seleccionada or es_atrasado:
+                pendientes.append(item)
         else:
-            if es_de_fecha or (fecha_sel == hoy_date and fila[IDX_FECHA_FIN] == hoy_str):
-                finalizados_ver.append(item_lav)
+            if es_de_fecha_seleccionada:
+                finalizados_ver.append(item)
+            elif fecha_sel == hoy_date and f_fin_celda == hoy_str:
+                finalizados_ver.append(item)
 
-    tab1, tab2, tab3 = st.tabs(["🚗 Operación Lavadero", "📊 Eficiencia de Turnos", "📅 Historial"])
+    tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial"])
 
     with tab1:
-        # PENDIENTES
-        st.subheader(f"Pendientes ({len(pendientes)})")
+        st.markdown(f"**Pendientes ({len(pendientes)})**")
         if pendientes:
+            pendientes.sort(key=lambda x: (not x["atr"], x["min_orden"]))
             cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
+            h_p = st.columns(cols_p)
+            h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
+
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    c[0].markdown(generar_badge_alerta(p['pro'], now_dt), unsafe_allow_html=True)
-                    c[1].write(f"**{p['dom']}**")
-                    c[2].write(p['cli']); c[3].write(p['mod']); c[4].write(p['ase'])
+                    if p['est'] == "PAUSA":
+                        badge = f"<div class='badge' style='background-color: #6c757d; color: white;'>{p['pro']}<br>PAUSADO</div>"
+                    elif p['est'] == "REPASO":
+                        badge = f"<div class='badge' style='background-color: #17a2b8; color: white;'>{p['pro']}<br>REPASO</div>"
+                    else:
+                        badge = f"<div class='badge badge-red'>{p['pro']}<br>ATRASADO</div>" if p['atr'] else generar_badge_alerta(p['pro'], now_dt)
+                    
+                    c[0].markdown(badge, unsafe_allow_html=True)
+                    c[1].markdown(f"<b>{p['dom']}</b>", unsafe_allow_html=True)
+                    c[2].markdown(f"<span class='txt-truncado'>{p['cli']}</span>", unsafe_allow_html=True)
+                    c[3].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
+                    c[4].markdown(f"<span class='txt-asesor'>{p['ase']}</span>", unsafe_allow_html=True)
                     with c[5]:
                         if not p['ini']:
-                            if st.button("▶️", key=f"s{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_INI1 + 1, now_dt.strftime("%H:%M"))
+                            if st.button("▶️", key=f"s{p['fila']}", type="primary"):
+                                hoja.update_cell(p['fila'], IDX_INI1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "LAVANDO"); st.rerun()
-                        elif not p['fin']:
-                            if st.button("🏁", key=f"f{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, now_dt.strftime("%H:%M"))
+                        elif p['ini'] and (p['est'] not in ["PAUSA", "REPASO", "FINALIZADO"]):
+                            cb = st.columns(2)
+                            if cb[0].button("⏸️", key=f"p{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "PAUSA"); st.rerun()
+                            if cb[1].button("🏁", key=f"f{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
+                                hoja.update_cell(p['fila'], IDX_FECHA_FIN + 1, hoy_str); st.rerun()
+                        elif p['est'] == "PAUSA":
+                            if st.button("🔄", key=f"r{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁", key=f"f2{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
                                 hoja.update_cell(p['fila'], IDX_FECHA_FIN + 1, hoy_str); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        # FINALIZADOS
-        st.subheader(f"Finalizados ({len(finalizados_ver)})")
-        for t in finalizados_ver:
-            with st.container():
-                r = st.columns([0.6, 0.6, 0.6, 0.8, 1.4, 1.4, 0.8, 1.2])
-                r[0].write(t['ini']); r[1].write(t['fin']); r[2].write(f"{calcular_tiempo_neto(t)}'")
-                r[3].write(f"**{t['dom']}**"); r[4].write(t['cli']); r[5].write(t['mod']); r[6].write(t['ase'])
-                with r[7]:
-                    c_chk, c_txt = st.columns([0.3, 0.7])
-                    with c_chk:
-                        nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
-                        if nk != t['ok']:
-                            hoja.update_cell(t['fila'], IDX_CTRL + 1, "SI" if nk else ""); st.rerun()
-                    c_txt.markdown("<span class='badge-ok'>ENTREGADO</span>" if t['ok'] else "", unsafe_allow_html=True)
-                st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
+        if finalizados_ver:
+            finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
+            cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
+            h_f = st.columns(cols_f)
+            h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
+            for t in finalizados_ver:
+                t['min_total'] = calcular_tiempo_neto(t)
+                with st.container():
+                    r = st.columns(cols_f)
+                    r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin']); r[2].write(f"{t['min_total']}'")
+                    r[3].markdown(f"<b>{t['dom']}</b>", unsafe_allow_html=True)
+                    r[4].markdown(f"<span class='txt-truncado'>{t['cli']}</span>", unsafe_allow_html=True)
+                    r[5].markdown(f"<span class='txt-truncado'>{t['mod']}</span>", unsafe_allow_html=True)
+                    r[6].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
+                    with r[7]:
+                        c_chk, c_txt = st.columns([0.3, 0.7])
+                        with c_chk:
+                            nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
+                            if nk != t['ok']:
+                                hoja.update_cell(t['fila'], IDX_CTRL + 1, "SI" if nk else ""); st.rerun()
+                        with c_txt:
+                            if t['ok']: st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            else: st.markdown(generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab2:
-        st.header(f"KPI de Turnos Taller")
-        if turnos_eficiencia:
-            df = pd.DataFrame(turnos_eficiencia)
-            prog = df[df['programado'] == True]
-            aus = prog[prog['vino'] == False]
-            adicionales = df[df['adicional'] == True]
-            asistencia = (len(prog[prog['vino']==True]) / len(prog) * 100) if len(prog)>0 else 0
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Agenda DMS", len(prog))
-            c2.metric("Show-up (Asistencia)", f"{int(asistencia)}%")
-            c3.metric("Adicionales (13:00hs)", len(adicionales))
-            c4.metric("Servicios 10k-100k", len(df[df['mantenimiento']==True]))
-
-            st.markdown("---")
-            st.subheader("📞 Recupero de Turnos Ausentes")
-            if len(aus) > 0:
-                for _, a in aus.iterrows():
-                    col1, col2, col3, col4 = st.columns([1, 2, 1, 1])
-                    col1.write(f"**{a['dom']}**")
-                    col2.write(f"Asesor: {a['asesor']}")
-                    col3.markdown("<span class='status-badge bg-danger'>NO VINO</span>", unsafe_allow_html=True)
-                    if a['recuperado']:
-                        col4.success("RECUPERADO ✅")
-                    else:
-                        if col4.button("Marcar Recuperado", key=f"recu_{a['fila']}"):
-                            hoja.update_cell(a['fila'], IDX_RECUPERO + 1, "SI"); st.rerun()
-            else:
-                st.success("Sin ausentes registrados.")
-        else:
-            st.info("No hay datos en la Columna B para medir eficiencia hoy.")
+        st.subheader("Resumen de Hoy")
+        if finalizados_ver:
+            df_hoy = pd.DataFrame(finalizados_ver)
+            df_hoy['minutos'] = df_hoy.apply(calcular_tiempo_neto, axis=1)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Lavados", len(df_hoy))
+            c2.metric("Promedio Real", f"{int(df_hoy['minutos'].mean())} min")
+            c3.metric("Max Lavado", f"{df_hoy['minutos'].max()} min")
+            col_g1, col_g2 = st.columns(2)
+            with col_g1: st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo Neto (min)"), use_container_width=True)
+            with col_g2: st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
+        else: st.info("Sin datos de hoy.")
 
     with tab3:
-        st.write("Cargando historial...")
-        # (Aquí puedes mantener el gráfico de barras que ya teníamos)
+        st.subheader("📅 Historial Mensual")
+        hist_list = []
+        for f in raw_data[1:]:
+            if len(f) >= 12 and f[IDX_FIN1] and f[IDX_INI1]:
+                try:
+                    f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                    item_h = {'ini': f[IDX_INI1], 'fin': f[IDX_FIN1], 'ini2': f[IDX_INI2], 'fin2': f[IDX_FIN2]}
+                    m = calcular_tiempo_neto(item_h)
+                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
+                except: continue
+        if hist_list:
+            df_h = pd.DataFrame(hist_list)
+            m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
+            df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
+            fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
+            fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig_hist, use_container_width=True)
+            st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y'), Promedio=lambda x: x['Promedio'].round(1).astype(str)+" min")[['Fecha', 'Lavados', 'Promedio']], hide_index=True, use_container_width=True)
 
 if __name__ == "__main__":
     main()
