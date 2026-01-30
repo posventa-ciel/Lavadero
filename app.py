@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Integral Lavadero y Taller", layout="wide")
+st.set_page_config(page_title="Programación Lavadero", layout="wide")
 
 # --- 2. ESTILOS CSS ---
 st.markdown("""
@@ -94,7 +94,7 @@ def main():
     hoy_date = now_dt.date()
     hoy_str = hoy_date.strftime("%d/%m/%Y")
 
-    st.markdown(f'<div class="header-box"><div class="header-title">CONTROL INTEGRAL POSVENTA</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="header-box"><div class="header-title">PROGRAMACIÓN LAVADERO</div><div style="text-align: right;"><div style="font-size: 16px; font-weight: 700;">{hoy_date.strftime("%d/%m/%Y")}</div><div style="font-size: 14px; opacity: 0.8;">{hora_actual} hs</div></div></div>', unsafe_allow_html=True)
 
     hoja = conectar_sheet()
     if not hoja: return
@@ -190,9 +190,18 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN1 + 1, hora_actual)
                                 hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
                                 hoja.update_cell(p['fila'], IDX_FECHA_FIN + 1, hoy_str); st.rerun()
+                        elif p['est'] == "PAUSA":
+                            if st.button("🔄", key=f"r{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_INI2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "REPASO"); st.rerun()
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁", key=f"f2{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN2 + 1, hora_actual)
+                                hoja.update_cell(p['fila'], IDX_EST + 1, "FINALIZADO")
+                                hoja.update_cell(p['fila'], IDX_FECHA_FIN + 1, hoy_str); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top: 25px;'></div>")
+        st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
         st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
         if finalizados_ver:
             finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
@@ -228,16 +237,21 @@ def main():
             c1.metric("Lavados", len(df_hoy))
             c2.metric("Promedio Real", f"{int(df_hoy['minutos'].mean())} min")
             c3.metric("Max Lavado", f"{df_hoy['minutos'].max()} min")
-            st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo Neto (min)"), use_container_width=True)
+            col_g1, col_g2 = st.columns(2)
+            with col_g1: st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo Neto por Patente"), use_container_width=True)
+            with col_g2: st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
+        else: st.info("Sin datos de hoy.")
 
     with tab3:
         st.subheader("📅 Historial Mensual")
         hist_list = []
         for f in raw_data[1:]:
-            if len(f) >= 12 and f[IDX_FECHA]:
+            if len(f) >= 12 and f[IDX_FIN1] and f[IDX_INI1]:
                 try:
                     f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
-                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": calcular_tiempo_neto({'ini':f[IDX_INI1],'fin':f[IDX_FIN1],'ini2':f[IDX_INI2],'fin2':f[IDX_FIN2]})})
+                    item_h = {'ini': f[IDX_INI1], 'fin': f[IDX_FIN1], 'ini2': f[IDX_INI2], 'fin2': f[IDX_FIN2]}
+                    m = calcular_tiempo_neto(item_h)
+                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
                 except: continue
         if hist_list:
             df_h = pd.DataFrame(hist_list)
@@ -249,10 +263,11 @@ def main():
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
             fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_hist, use_container_width=True)
-            
-            # --- NUEVO: HISTORIAL MENSUAL TALLER ---
+            st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y'), Promedio=lambda x: x['Promedio'].round(1).astype(str)+" min")[['Fecha', 'Lavados', 'Promedio']], hide_index=True, use_container_width=True)
+
+            # --- NUEVO: HISTORIAL TALLER ABAJO ---
             st.markdown("---")
-            st.subheader("📊 Resumen Taller (Mes Seleccionado)")
+            st.subheader(f"📊 Resumen Taller - Mes {m_sel}")
             t_mes = []
             for f in raw_data[1:]:
                 if len(f) >= 16 and m_sel in f[IDX_FECHA]:
@@ -263,72 +278,54 @@ def main():
                             t_mes.append({"Fecha": f[IDX_FECHA].split()[0], "DMS": (h_b != "13:00"), "Vino": v, "Rec": (f[IDX_RECUPERO].upper() == "SI")})
                     except: continue
             if t_mes:
-                df_tmes = pd.DataFrame(t_mes).groupby('Fecha').agg(Total_DMS=('DMS','sum'), Asistencia=('Vino','sum'), Recuperados=('Rec','sum')).reset_index()
-                st.dataframe(df_tmes, use_container_width=True, hide_index=True)
+                df_tmes = pd.DataFrame(t_mes).groupby('Fecha').agg(Turnos_DMS=('DMS','sum'), Asistencia=('Vino','sum'), Recuperados=('Rec','sum')).reset_index()
+                st.dataframe(df_tmes.sort_values('Fecha', ascending=False), use_container_width=True, hide_index=True)
 
     with tab4:
         st.subheader(f"Análisis de Turnos Taller - {fecha_sel.strftime('%d/%m/%Y')}")
-        turnos_data = []
+        turnos_hoy = []
         for i, fila in enumerate(raw_data[1:], start=2):
             if len(fila) < 16: fila += [""] * (16 - len(fila))
             f_celda = fila[IDX_FECHA]
             if not ((f_str in f_celda) or (f_str_cero in f_celda)): continue
-
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
                 prometido, trabajo_g, mod_celda = fila[IDX_PRO].upper(), fila[IDX_TRABAJO].upper(), fila[IDX_MOD].upper()
                 es_adi = (hora_b == "13:00")
                 vino = not ("NO VINO" in prometido or "NO VINO" in trabajo_g)
-                # Buscador de Servicios en Columna G
+                # Buscador en Col G
                 p_serv = ["SERV", "KM", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K", "MANT"]
-                es_mantenimiento = any(x in trabajo_g for x in p_serv)
+                es_serv = any(x in trabajo_g for x in p_serv)
+                turnos_hoy.append({"fila": i, "dom": dom, "cli": fila[IDX_CLI], "mod": mod_celda, "ase": limpiar_asesor(fila[IDX_ASE]), "dms": not es_adi, "vino": vino, "serv": es_serv, "rec": (fila[IDX_RECUPERO].upper() == "SI")})
 
-                turnos_data.append({
-                    "fila": i, "dom": fila[IDX_DOM].upper(), "cli": fila[IDX_CLI], "mod": mod_celda,
-                    "ase": limpiar_asesor(fila[IDX_ASE]), "es_dms": not es_adi, "vino": vino, 
-                    "mantenimiento": es_mantenimiento, "recuperado": fila[IDX_RECUPERO].strip().upper() == "SI"
-                })
-
-        if turnos_data:
-            df_t = pd.DataFrame(turnos_data)
-            dms = df_t[df_t['es_dms'] == True]
-            ausentes = dms[dms['vino'] == False]
+        if turnos_hoy:
+            df_t = pd.DataFrame(turnos_hoy); dms = df_t[df_t['dms'] == True]; aus = dms[dms['vino'] == False]
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Turnos DMS", len(dms))
-            c2.metric("Asistencia", f"{int(len(dms[dms['vino']]) / len(dms) * 100)}%" if len(dms)>0 else "0%")
-            c3.metric("Adicionales", len(df_t[df_t['es_dms'] == False]))
-            c4.metric("Mantenimientos (Col G)", len(df_t[df_t['mantenimiento']==True]))
-
+            c2.metric("Asistencia", f"{int(len(dms[dms['vino']])/len(dms)*100)}%" if len(dms)>0 else "0%")
+            c3.metric("Adicionales", len(df_t[~df_t['dms']]))
+            c4.metric("Mantenimientos (Col G)", len(df_t[df_t['serv']]))
+            
             st.markdown("---")
             st.subheader("📞 Gestión de Ausentes")
-            if len(ausentes) > 0:
-                # Tabla estilizada de ausentes
-                for _, a in ausentes.iterrows():
+            if not aus.empty:
+                for _, a in aus.iterrows():
                     with st.container():
-                        r_col = st.columns([0.8, 1.5, 1.5, 0.8, 1, 1.2])
-                        r_col[0].write(f"**{a['dom']}**")
-                        r_col[1].write(f"<small>{a['cli']}</small>", unsafe_allow_html=True)
-                        r_col[2].write(f"<small>{a['mod']}</small>", unsafe_allow_html=True)
-                        r_col[3].write(a['ase'])
-                        if a['recuperado']:
-                            r_col[4].markdown("✅ **RECUPERADO**")
-                            r_col[5].write("")
-                        else:
-                            r_col[4].markdown("❌ *Pendiente*")
-                            if r_col[5].button("Recuperar", key=f"btn_rec_{a['fila']}"):
-                                hoja.update_cell(a['fila'], IDX_RECUPERO + 1, "SI"); st.rerun()
+                        r = st.columns([0.8, 1.5, 1.5, 0.8, 1, 1.2])
+                        r[0].write(f"**{a['dom']}**"); r[1].write(f"<small>{a['cli']}</small>", unsafe_allow_html=True); r[2].write(f"<small>{a['mod']}</small>", unsafe_allow_html=True); r[3].write(a['ase'])
+                        r[4].write("❌ PENDIENTE" if not a['rec'] else "✅ RECUPERADO")
+                        if not a['rec'] and r[5].button("Recuperar", key=f"rc_{a['fila']}"):
+                            hoja.update_cell(a['fila'], IDX_RECUPERO+1, "SI"); st.rerun()
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
             
             st.markdown("---")
-            g_col1, g_col2 = st.columns(2)
-            with g_col1:
-                st.plotly_chart(px.pie(df_t, names='mantenimiento', title="Mix: Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
-            with g_col2:
-                if len(ausentes) > 0:
-                    rec_df = pd.DataFrame([{"E": "Recup.", "C": len(ausentes[ausentes['recuperado']])}, {"E": "Pend.", "C": len(ausentes[~ausentes['recuperado']])}])
-                    st.plotly_chart(px.bar(rec_df, x="E", y="C", title="Efectividad de Recupero"), use_container_width=True)
-        else:
-            st.info("Sin turnos detectados para medir eficiencia hoy.")
+            col_p1, col_p2 = st.columns(2)
+            col_p1.plotly_chart(px.pie(df_t, names='serv', title="Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
+            if not aus.empty:
+                fig_rec = go.Figure([go.Bar(x=["Recuperados", "Pendientes"], y=[len(aus[aus['rec']]), len(aus[~aus['rec']])], marker_color=['#2e7d32', '#d32f2f'])])
+                fig_rec.update_layout(title="Efectividad de Recupero")
+                col_p2.plotly_chart(fig_rec, use_container_width=True)
+        else: st.info("Sin turnos detectados.")
 
 if __name__ == "__main__":
     main()
