@@ -265,79 +265,125 @@ def main():
             st.plotly_chart(fig_hist, use_container_width=True)
             st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y'), Promedio=lambda x: x['Promedio'].round(1).astype(str)+" min")[['Fecha', 'Lavados', 'Promedio']], hide_index=True, use_container_width=True)
 
+    # Dentro de main(), actualizar IDX_TRABAJO para apuntar a Columna G
+    # 0:Fecha, 1:B, 2:C, 3:D, 4:E, 5:F, 6:G (Trabajo a realizar)
+    IDX_TRABAJO = 6 
+
+    # --- EN TAB 4: EFICIENCIA TURNOS ---
     with tab4:
-        st.subheader(f"Análisis de Turnos Taller - {fecha_sel.strftime('%d/%m/%Y')}")
+        st.subheader(f"Gestión de Turnos y Recupero - {fecha_sel.strftime('%d/%m/%Y')}")
         
         turnos_data = []
-        # IDX_ING_DMS es Columna B (Indice 1)
-        # IDX_RECUPERO es Columna P (Indice 15)
-        IDX_ING_DMS, IDX_RECUPERO = 1, 15
-
         for i, fila in enumerate(raw_data[1:], start=2):
             if len(fila) < 16: fila += [""] * (16 - len(fila))
             
-            # Filtramos por la fecha seleccionada en el sidebar
             f_celda = fila[IDX_FECHA]
             if not ((f_str in f_celda) or (f_str_cero in f_celda)): continue
 
             hora_b = fila[IDX_ING_DMS].strip()
-            # Solo procesamos si la columna B tiene horario (Turnos DMS o Adicionales 13:00)
             if hora_b != "":
                 prometido = fila[IDX_PRO].upper()
+                trabajo_g = fila[IDX_TRABAJO].upper() # Leemos de Columna G
                 modelo = fila[IDX_MOD].upper()
                 
                 es_adicional = (hora_b == "13:00")
-                vino = not ("NO VINO" in prometido or "NO VINO" in modelo)
-                es_mantenimiento = any(x in modelo for x in ["SERV", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"])
+                vino = not ("NO VINO" in prometido or "NO VINO" in trabajo_g)
+                
+                # Buscador de Servicios en Columna G
+                palabras_servicio = ["SERVICIO", " KM", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"]
+                es_mantenimiento = any(x in trabajo_g for x in palabras_servicio)
 
                 turnos_data.append({
-                    "fila": i, "dom": fila[IDX_DOM].upper(), "ase": limpiar_asesor(fila[IDX_ASE]),
+                    "fila": i, "dom": fila[IDX_DOM].upper(), "cliente": fila[IDX_CLI],
+                    "modelo": modelo, "ase": limpiar_asesor(fila[IDX_ASE]),
                     "es_dms": not es_adicional, "es_adi": es_adicional, "vino": vino, 
                     "mantenimiento": es_mantenimiento, "recuperado": fila[IDX_RECUPERO].strip().upper() == "SI"
                 })
 
         if turnos_data:
             df_t = pd.DataFrame(turnos_data)
-            
-            # KPIs
             dms = df_t[df_t['es_dms'] == True]
             ausentes = dms[dms['vino'] == False]
-            asistencia = (len(dms[dms['vino']==True]) / len(dms) * 100) if len(dms)>0 else 0
             
+            # KPIs Principales
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Turnos DMS", len(dms))
-            c2.metric("Asistencia", f"{int(asistencia)}%")
-            c3.metric("Adicionales (13:00)", len(df_t[df_t['es_adi']==True]))
-            c4.metric("Mantenimientos", len(df_t[df_t['mantenimiento']==True]))
+            asist_val = (len(dms[dms['vino']==True]) / len(dms) * 100) if len(dms)>0 else 0
+            c2.metric("Asistencia", f"{int(asist_val)}%")
+            c3.metric("Adicionales", len(df_t[df_t['es_adi']==True]))
+            c4.metric("Servicios (Col G)", len(df_t[df_t['mantenimiento']==True]))
 
             st.markdown("---")
-            col_rec1, col_rec2 = st.columns([0.6, 0.4])
-            
-            with col_rec1:
-                st.markdown("### 📞 Gestión de Ausentes")
-                if len(ausentes) > 0:
-                    for _, aus in ausentes.iterrows():
-                        r_col = st.columns([1, 1, 1, 1])
+            st.markdown("### 📋 Listado de Ausentes para Recupero")
+            if len(ausentes) > 0:
+                # Encabezados estilo tabla
+                cols_h = st.columns([0.8, 1.5, 1.5, 0.8, 1, 1])
+                cols_h[0].caption("DOMINIO"); cols_h[1].caption("CLIENTE"); cols_h[2].caption("MODELO")
+                cols_h[3].caption("ASESOR"); cols_h[4].caption("ESTADO"); cols_h[5].caption("GESTIÓN")
+                
+                for _, aus in ausentes.iterrows():
+                    with st.container():
+                        r_col = st.columns([0.8, 1.5, 1.5, 0.8, 1, 1])
                         r_col[0].write(f"**{aus['dom']}**")
-                        r_col[1].write(aus['ase'])
+                        r_col[1].write(f"<small>{aus['cliente']}</small>", unsafe_allow_html=True)
+                        r_col[2].write(f"<small>{aus['modelo']}</small>", unsafe_allow_html=True)
+                        r_col[3].write(aus['ase'])
+                        
                         if aus['recuperado']:
-                            r_col[2].markdown("✅ **RECUPERADO**")
-                            r_col[3].write("")
+                            r_col[4].success("RECUPERADO")
+                            r_col[5].write("")
                         else:
-                            r_col[2].markdown("❌ *Pendiente*")
-                            if r_col[3].button("Logré Recuperar", key=f"btn_rec_{aus['fila']}"):
+                            r_col[4].error("AUSENTE")
+                            if r_col[5].button("Logré Recuperar", key=f"btn_rec_{aus['fila']}"):
                                 hoja.update_cell(aus['fila'], IDX_RECUPERO + 1, "SI"); st.rerun()
-                else:
-                    st.success("No hay turnos ausentes para procesar.")
+                    st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
+            else:
+                st.success("No hay ausentes pendientes hoy.")
 
-            with col_rec2:
-                st.markdown("### Mix de Trabajo")
-                fig_pie = px.pie(df_t, names='mantenimiento', title="Servicios vs Otros", 
-                                 color_discrete_sequence=['#00235d', '#fbc02d'],
-                                 labels={'mantenimiento': 'Es Servicio'})
-                st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No se detectaron turnos con horario en la Columna B para esta fecha.")
+            # Gráficos al final
+            st.markdown("---")
+            g1, g2 = st.columns(2)
+            with g1:
+                st.plotly_chart(px.pie(df_t, names='mantenimiento', title="Mix: Servicios vs Otros", 
+                                     color_discrete_sequence=['#2e7d32', '#6c757d']), use_container_width=True)
+            with g2:
+                # Gráfico de efectividad de recupero
+                rec_df = pd.DataFrame([
+                    {"Estado": "Recuperados", "Cant": len(ausentes[ausentes['recuperado']==True])},
+                    {"Estado": "No Recuperados", "Cant": len(ausentes[ausentes['recuperado']==False])}
+                ])
+                st.plotly_chart(px.bar(rec_df, x='Estado', y='Cant', color='Estado', title="Efectividad de Recupero"), use_container_width=True)
+
+    # --- EN TAB 3: HISTORIAL (Añadir métricas de taller) ---
+    with tab3:
+        st.markdown("---")
+        st.subheader("📊 Historial Mensual de Taller")
+        # Aquí procesamos todos los datos del mes para turnos
+        taller_mensual = []
+        for f in raw_data[1:]:
+            if len(f) >= 16 and f[IDX_FECHA] != "":
+                try:
+                    fecha_f = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                    mes_f = fecha_f.strftime("%Y-%m")
+                    if mes_f == m_sel: # m_sel es la variable del selector de mes que ya tienes
+                        h_b = f[IDX_ING_DMS].strip()
+                        if h_b != "":
+                            v = not ("NO VINO" in f[IDX_PRO].upper() or "NO VINO" in f[IDX_TRABAJO].upper())
+                            taller_mensual.append({
+                                "Fecha": fecha_f, "DMS": (h_b != "13:00"), "Vino": v, 
+                                "Recuperado": (f[IDX_RECUPERO].upper() == "SI")
+                            })
+                except: continue
+        
+        if taller_mensual:
+            df_tm = pd.DataFrame(taller_mensual)
+            res_m = df_tm.groupby('Fecha').agg(
+                Total_Turnos=('DMS', 'sum'),
+                Asistencias=('Vino', 'sum'),
+                Recuperos=('Recuperado', 'sum')
+            ).reset_index()
+            st.write(f"**Resumen Taller {m_sel}:**")
+            st.table(res_m.assign(Fecha=res_m['Fecha'].dt.strftime('%d/%m/%Y')))
 
 if __name__ == "__main__":
     main()
