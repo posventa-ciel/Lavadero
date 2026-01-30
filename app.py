@@ -151,7 +151,7 @@ def main():
             elif fecha_sel == hoy_date and f_fin_celda == hoy_str:
                 finalizados_ver.append(item)
 
-    tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
 
     with tab1:
         st.markdown(f"**Pendientes ({len(pendientes)})**")
