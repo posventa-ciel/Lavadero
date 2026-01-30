@@ -62,6 +62,18 @@ def limpiar_asesor(nombre):
     partes = nombre.split()
     return partes[1] if len(partes) > 1 and partes[0].isdigit() else partes[0]
 
+def calcular_tiempo_neto(item):
+    try:
+        fmt = "%H:%M"
+        t1 = 0
+        if item['ini'] and item['fin']:
+            t1 = (datetime.strptime(item['fin'], fmt) - datetime.strptime(item['ini'], fmt)).total_seconds() / 60
+        t2 = 0
+        if item['ini2'] and item['fin2']:
+            t2 = (datetime.strptime(item['fin2'], fmt) - datetime.strptime(item['ini2'], fmt)).total_seconds() / 60
+        return max(0, int(t1 + t2))
+    except: return 0
+
 def generar_badge_alerta(hora_prometida, now_dt):
     if not hora_prometida or ":" not in str(hora_prometida): return f"<span>{hora_prometida}</span>"
     try:
@@ -87,7 +99,6 @@ def main():
     if not hoja: return
     raw_data = hoja.get_all_values()
 
-    # IDX_CTRL corresponde a la columna N (Indice 13)
     IDX_FECHA, IDX_ASE, IDX_DOM, IDX_MOD, IDX_CLI, IDX_PRO, IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL = 0, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13
 
     with st.sidebar:
@@ -110,8 +121,7 @@ def main():
 
         f_celda = fila[IDX_FECHA]
         estado = fila[IDX_EST].strip().upper()
-        
-        es_de_hoy = (f_str in f_celda) or (f_str_cero in f_celda)
+        es_de_fecha_seleccionada = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_hora_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
 
         es_atrasado = False
@@ -120,7 +130,6 @@ def main():
             if f_dt < fecha_sel: es_atrasado = True
         except: pass
 
-        # Un auto tiene el OK si en la columna N dice "SI" o "OK"
         es_ok = fila[IDX_CTRL].strip().upper() in ["SI", "OK"]
 
         item = {
@@ -131,11 +140,15 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda
         }
 
+        # --- CLASIFICACIÓN CORREGIDA (EVITA DUPLICADOS) ---
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
-            if es_de_hoy or es_atrasado:
+            if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
         else:
-            if es_de_hoy or (estado == "FINALIZADO" and fecha_sel == hoy_date):
+            # Solo mostramos en finalizados si:
+            # 1. Es la fecha que elegimos en el calendario
+            # 2. O si es un atrasado que se terminó HOY (Estado FINALIZADO) viendo la vista de Hoy
+            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
 
     tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial"])
@@ -191,91 +204,66 @@ def main():
         st.markdown(f"**Finalizados ({len(finalizados_ver)})**")
         if finalizados_ver:
             finalizados_ver.sort(key=lambda x: obtener_minutos_orden(x['ini']))
-            cols_f = [0.6, 0.6, 0.8, 1.4, 1.4, 0.8, 1.2]
+            cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
             h_f = st.columns(cols_f)
-            h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("DOM"); h_f[3].caption("CLIENTE"); h_f[4].caption("MODELO"); h_f[5].caption("ASESOR"); h_f[6].caption("ESTADO")
+            h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
             for t in finalizados_ver:
+                t['min_total'] = calcular_tiempo_neto(t)
                 with st.container():
                     r = st.columns(cols_f)
-                    r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin'])
-                    r[2].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
-                    r[3].markdown(f"<span class='txt-truncado'>{t['cli']}</span>", unsafe_allow_html=True)
-                    r[4].markdown(f"<span class='txt-truncado'>{t['mod']}</span>", unsafe_allow_html=True)
-                    r[5].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
-                    with r[6]:
+                    r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin']); r[2].write(f"{t['min_total']}'")
+                    r[3].markdown(f"<span class='txt-patente'>{t['dom']}</span>", unsafe_allow_html=True)
+                    r[4].markdown(f"<span class='txt-truncado'>{t['cli']}</span>", unsafe_allow_html=True)
+                    r[5].markdown(f"<span class='txt-truncado'>{t['mod']}</span>", unsafe_allow_html=True)
+                    r[6].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
+                    with r[7]:
                         c_chk, c_txt = st.columns([0.3, 0.7])
                         with c_chk:
-                            # Al tildar, escribimos "SI" en la columna N del sheet
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']:
+                                # ESCRIBE "SI" EN COLUMNA N (COLUMNA 14)
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "SI" if nk else ""); st.rerun()
                         with c_txt:
-                            if t['ok']:
-                                st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
+                            if t['ok']: st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            else: st.markdown(generar_badge_alerta(t['pro'], now_dt), unsafe_allow_html=True)
                     st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab2:
-        st.subheader(f"Resumen de Hoy")
+        st.subheader("Resumen de Hoy")
         if finalizados_ver:
             df_hoy = pd.DataFrame(finalizados_ver)
-            def calc_tiempo(row):
-                try:
-                    f = row['fin2'] if row['fin2'] else row['fin']
-                    return max(0, int((datetime.strptime(f, "%H:%M") - datetime.strptime(row['ini'], "%H:%M")).total_seconds() / 60))
-                except: return 0
-            df_hoy['minutos'] = df_hoy.apply(calc_tiempo, axis=1)
-            
+            df_hoy['minutos'] = df_hoy.apply(calcular_tiempo_neto, axis=1)
             c1, c2, c3 = st.columns(3)
             c1.metric("Lavados", len(df_hoy))
-            c2.metric("Promedio", f"{int(df_hoy['minutos'].mean())} min")
-            c3.metric("Max Demora", f"{df_hoy['minutos'].max()} min")
-
+            c2.metric("Promedio Real", f"{int(df_hoy['minutos'].mean())} min")
+            c3.metric("Max Lavado", f"{df_hoy['minutos'].max()} min")
             col_g1, col_g2 = st.columns(2)
-            with col_g1:
-                st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo por Vehículo"), use_container_width=True)
-            with col_g2:
-                st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
-        else:
-            st.info("Sin datos de hoy.")
+            with col_g1: st.plotly_chart(px.bar(df_hoy, x='dom', y='minutos', color='minutos', title="Tiempo Neto (min)"), use_container_width=True)
+            with col_g2: st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
+        else: st.info("Sin datos de hoy.")
 
     with tab3:
-        st.subheader("📅 Historial Mensual")
+        st.subheader("Historial (Tiempo Neto)")
         hist_list = []
         for f in raw_data[1:]:
             if len(f) >= 12 and f[IDX_FIN1] and f[IDX_INI1]:
                 try:
                     f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
-                    h_f = f[IDX_FIN2] if f[IDX_FIN2] else f[IDX_FIN1]
-                    m = (datetime.strptime(h_f, "%H:%M") - datetime.strptime(f[IDX_INI1], "%H:%M")).total_seconds() / 60
-                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
+                    item_h = {'ini': f[IDX_INI1], 'fin': f[IDX_FIN1], 'ini2': f[IDX_INI2], 'fin2': f[IDX_FIN2]}
+                    m = calcular_tiempo_neto(item_h)
+                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": m})
                 except: continue
-        
         if hist_list:
             df_h = pd.DataFrame(hist_list)
-            m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            m_sel = st.selectbox("Mes:", sorted(df_h['Mes'].unique(), reverse=True))
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             df_m['Fecha_str'] = df_m['Fecha'].dt.strftime('%d/%m')
-
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha_str'], y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
-            fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio min', line=dict(color='#fbc02d', width=4), yaxis='y2'))
-            fig_hist.update_layout(
-                yaxis=dict(title="Cantidad de Autos", side="left"),
-                yaxis2=dict(title="Minutos Promedio", overlaying="y", side="right", range=[0, df_m['Promedio'].max() + 20]),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hovermode="x unified"
-            )
+            fig_hist.add_trace(go.Scatter(x=df_m['Fecha_str'], y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
+            fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_hist, use_container_width=True)
-
-            st.markdown("### 📋 Detalle del Mes")
-            df_table = df_m.sort_values('Fecha', ascending=False).copy()
-            df_table['Fecha'] = df_table['Fecha'].dt.strftime('%d/%m/%Y')
-            df_table['Promedio'] = df_table['Promedio'].round(1).astype(str) + " min"
-            st.dataframe(df_table[['Fecha', 'Lavados', 'Promedio']], use_container_width=True, hide_index=True)
-        else:
-            st.warning("Sin datos para el historial.")
+            st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y'), Promedio=lambda x: x['Promedio'].round(1).astype(str)+" min")[['Fecha', 'Lavados', 'Promedio']], hide_index=True, use_container_width=True)
 
 if __name__ == "__main__":
     main()
