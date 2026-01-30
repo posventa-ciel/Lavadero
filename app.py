@@ -140,15 +140,19 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda
         }
 
-        # --- CLASIFICACIÓN CORREGIDA (EVITA DUPLICADOS) ---
+        # --- CLASIFICACIÓN CORREGIDA SIN DUPLICADOS ---
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
+            # Pendientes: si es la fecha seleccionada o es un atrasado sin terminar
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
         else:
-            # Solo mostramos en finalizados si:
-            # 1. Es la fecha que elegimos en el calendario
-            # 2. O si es un atrasado que se terminó HOY (Estado FINALIZADO) viendo la vista de Hoy
-            if es_de_fecha_seleccionada or (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
+            # Finalizados: 
+            # 1. Solo si es la fecha seleccionada en el calendario.
+            # 2. O si es un atrasado PERO su estado es FINALIZADO (indicando que se terminó hoy)
+            #    Y estamos viendo la fecha de Hoy.
+            if es_de_fecha_seleccionada:
+                finalizados_ver.append(item)
+            elif (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
 
     tab1, tab2, tab3 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial"])
@@ -221,7 +225,6 @@ def main():
                         with c_chk:
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']:
-                                # ESCRIBE "SI" EN COLUMNA N (COLUMNA 14)
                                 hoja.update_cell(t['fila'], IDX_CTRL + 1, "SI" if nk else ""); st.rerun()
                         with c_txt:
                             if t['ok']: st.markdown("<span class='badge badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
