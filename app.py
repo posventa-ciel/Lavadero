@@ -265,7 +265,7 @@ def main():
             st.plotly_chart(fig_hist, use_container_width=True)
             st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y'), Promedio=lambda x: x['Promedio'].round(1).astype(str)+" min")[['Fecha', 'Lavados', 'Promedio']], hide_index=True, use_container_width=True)
 
-with tab4:
+    with tab4:
         st.subheader(f"Análisis de Turnos Taller - {fecha_sel.strftime('%d/%m/%Y')}")
         
         turnos_data = []
