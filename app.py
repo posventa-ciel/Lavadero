@@ -126,6 +126,7 @@ def main():
 
         es_atrasado = False
         try:
+            # Extraemos solo la parte de la fecha para comparar
             f_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y").date()
             if f_dt < fecha_sel: es_atrasado = True
         except: pass
@@ -140,18 +141,17 @@ def main():
             "min_orden": obtener_minutos_orden(fila[IDX_PRO]), "fecha": f_celda
         }
 
-        # --- CLASIFICACIÓN CORREGIDA SIN DUPLICADOS ---
+        # --- LÓGICA DE CLASIFICACIÓN CORREGIDA PARA REMANENTES ---
         if not tiene_hora_fin or estado in ["PAUSA", "REPASO"]:
-            # Pendientes: si es la fecha seleccionada o es un atrasado sin terminar
+            # PENDIENTES: Lo de hoy o lo atrasado sin terminar
             if es_de_fecha_seleccionada or es_atrasado:
                 pendientes.append(item)
         else:
-            # Finalizados: 
-            # 1. Solo si es la fecha seleccionada en el calendario.
-            # 2. O si es un atrasado PERO su estado es FINALIZADO (indicando que se terminó hoy)
-            #    Y estamos viendo la fecha de Hoy.
+            # FINALIZADOS:
+            # 1. Si la fecha elegida en el calendario COINCIDE con la fecha del auto
             if es_de_fecha_seleccionada:
                 finalizados_ver.append(item)
+            # 2. Si estamos viendo HOY y el auto es atrasado PERO se finalizó hoy (Estado FINALIZADO)
             elif (fecha_sel == hoy_date and es_atrasado and estado == "FINALIZADO"):
                 finalizados_ver.append(item)
 
