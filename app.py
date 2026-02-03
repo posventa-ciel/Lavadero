@@ -23,6 +23,7 @@ st.markdown("""
     }
     .header-title { font-size: 24px; font-weight: bold; text-transform: uppercase; margin: 0; }
     .compact-row { border-bottom: 1px solid #e0e0e0; padding: 2px 0 !important; margin: 0 !important; line-height: 1.2 !important; }
+    p { margin: 0 !important; }
     .txt-patente { color: #00235d; font-weight: 700; font-size: 13px; }
     .txt-truncado { color: #333; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; }
     .txt-asesor { color: #666; font-style: italic; font-size: 11px; }
@@ -65,13 +66,11 @@ def procesar_prometido_completo(val, hoy, tz):
     except: return tz.localize(datetime(2099, 1, 1))
 
 def generar_badge_inteligente(prometido_dt, now_dt, estado_actual, pro_str):
-    # PRIMERO: Respetar estado manual (PAUSA/REPASO)
     if estado_actual == "PAUSA":
         return f"<div class='badge badge-gray'>{pro_str}<br>PAUSADO</div>"
     if estado_actual == "REPASO":
         return f"<div class='badge badge-teal'>{pro_str}<br>REPASO</div>"
 
-    # SEGUNDO: Lógica de tiempo
     es_hoy = prometido_dt.date() <= now_dt.date()
     hora_str = prometido_dt.strftime("%H:%M")
     
@@ -129,9 +128,8 @@ def main():
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
         
-        # --- FILTROS CRÍTICOS RESTAURADOS ---
         if not dom: continue
-        # Filtro de exclusión que faltaba:
+        # Filtro de exclusión de unidades que no se lavan
         if any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         
         if busqueda and busqueda not in dom: continue
@@ -152,19 +150,20 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # LÓGICA LAVADERO: Hoy + Atrasados + Futuros válidos
+        # LÓGICA LAVADERO
         if not tiene_fin or estado in ["PAUSA", "REPASO"]:
             pendientes.append(item)
         else:
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
-        # LÓGICA TURNOS TALLER (Solo hoy)
+        # LÓGICA TURNOS TALLER (Solo para la fecha seleccionada)
         if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
                 vino = not ("NO VINO" in pro_raw or "NO VINO" in item['trabajo'])
-                es_serv = any(x in item['trabajo'] for x in ["SERV", "KM", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K", "MANT"])
+                palabras_serv = ["SERV", "KM", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K", "MANT"]
+                es_serv = any(x in item['trabajo'] for x in palabras_serv)
                 turnos_eficiencia.append({"fila":i, "dom":dom, "cli":fila[IDX_CLI], "mod":fila[IDX_MOD], "ase":item['ase'], "dms":(hora_b != "13:00"), "vino":vino, "serv":es_serv, "rec":(fila[IDX_RECUPERO].upper() == "SI")})
 
     tab1, tab2, tab3, tab4 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
@@ -180,7 +179,6 @@ def main():
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    # Badge Inteligente corregido para respetar PAUSA
                     badge_html = generar_badge_inteligente(p['pro_dt'], now_dt, p['est'], p['pro_str'])
                     c[0].markdown(badge_html, unsafe_allow_html=True)
                     c[1].write(f"**{p['dom']}**")
@@ -205,7 +203,8 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top: 25px;'></div>")
+        # Aquí corregí la línea que daba error visual
+        st.markdown("---") 
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
