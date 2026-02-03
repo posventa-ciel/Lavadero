@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime, date
 import json
 import pytz
 import plotly.express as px
@@ -64,12 +64,11 @@ def procesar_fecha_flexible(val, hoy, tz):
             return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
         except: pass
         
-    # Caso fechas completas o parciales
+    # Caso fechas completas
     formatos = ["%d/%m/%Y %H:%M", "%d/%m/%y %H:%M", "%d/%m %H:%M", "%d/%m/%Y", "%d/%m"]
     for fmt in formatos:
         try:
             dt = datetime.strptime(val, fmt)
-            # Si el formato no tiene año, usar el actual
             if "Y" not in fmt and "y" not in fmt: dt = dt.replace(year=hoy.year)
             return tz.localize(dt)
         except ValueError: continue
@@ -77,27 +76,19 @@ def procesar_fecha_flexible(val, hoy, tz):
     return tz.localize(datetime(2099, 12, 31))
 
 def formatear_fecha_corta(dt, now_dt):
-    # Devuelve "HH:MM" si es hoy, o "dd/mm HH:MM" si es otro día. Nunca el año.
     if dt.year == 2099: return "S/D"
-    if dt.date() == now_dt.date():
-        return dt.strftime("%H:%M")
+    if dt.date() == now_dt.date(): return dt.strftime("%H:%M")
     return dt.strftime("%d/%m %H:%M")
 
 def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
-    # Badge para la lista de ARRIBA (Pendientes de Lavado)
     texto = formatear_fecha_corta(prometido_dt, now_dt)
-    
     if estado_actual == "PAUSA": return f"<div class='badge badge-gray'>{texto}<br>PAUSADO</div>"
     if estado_actual == "REPASO": return f"<div class='badge badge-teal'>{texto}<br>REPASO</div>"
     if prometido_dt.year == 2099: return f"<div class='badge badge-gray'>{texto}</div>"
 
     es_hoy = prometido_dt.date() <= now_dt.date()
+    if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
     
-    # Si es futuro (mañana o después) -> AZUL
-    if not es_hoy:
-        return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
-    
-    # Si es hoy -> Semáforo de atraso
     diff = (prometido_dt - now_dt).total_seconds() / 60
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
     elif diff <= 60: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
@@ -105,18 +96,10 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
     return f"<b>{texto}</b>"
 
 def generar_badge_entrega(prometido_dt, now_dt):
-    # Badge para la lista de ABAJO (Finalizados, esperando Control/Entrega)
     texto = formatear_fecha_corta(prometido_dt, now_dt)
     if prometido_dt.year == 2099: return ""
 
-    # Calculamos cuánto falta para la entrega
     minutos_restantes = (prometido_dt - now_dt).total_seconds() / 60
-    
-    # Lógica solicitada:
-    # < 0 min: DEMORADO (Rojo)
-    # 0 - 30 min: URGENTE (Rojo)
-    # 30 - 60 min: ATENCION (Amarillo)
-    # > 60 min: A TIEMPO (Gris o Normal)
     
     if minutos_restantes < 0:
         return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>DEMORADO</div>"
@@ -263,11 +246,9 @@ def main():
                     with r[7]:
                         c_chk, c_txt = st.columns([0.2, 0.8])
                         with c_chk:
-                            # Checkbox: Si está marcado en Excel, aparece marcado. Si el usuario lo cambia, actualiza.
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']: hoja.update_cell(t['fila'], IDX_CTRL+1, "SI" if nk else ""); st.rerun()
                         with c_txt:
-                            # Lógica Corregida: Solo muestra verde si REALMENTE está tildado. Sino, muestra alerta de tiempo.
                             if t['ok']: 
                                 st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
                             else: 
