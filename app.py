@@ -54,62 +54,73 @@ def conectar_sheet():
 
 # --- 4. FUNCIONES AUXILIARES ---
 def procesar_fecha_flexible(val, hoy, tz):
-    """
-    Intenta leer la fecha en múltiples formatos para evitar errores de ordenamiento.
-    """
-    val = str(val).strip().replace("-", "/") # Normalizamos guiones a barras
+    val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
-
-    # Caso 1: Solo hora (Ej: 15:00) -> Asume hoy
+    # Caso Hora sola
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
             return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
         except: pass
-
-    # Caso 2: Probar múltiples formatos de fecha
-    formatos = [
-        "%d/%m/%Y %H:%M",  # 04/02/2026 16:00
-        "%d/%m/%y %H:%M",  # 04/02/26 16:00 (Año corto)
-        "%d/%m %H:%M",     # 04/02 16:00 (Sin año, asume actual)
-        "%d/%m/%Y",        # Solo fecha completa
-        "%d/%m"            # Solo día y mes
-    ]
-
+    # Caso Fechas
+    formatos = ["%d/%m/%Y %H:%M", "%d/%m/%y %H:%M", "%d/%m %H:%M", "%d/%m/%Y", "%d/%m"]
     for fmt in formatos:
         try:
             dt = datetime.strptime(val, fmt)
-            # Si el formato no tenía año (ej: 04/02), agregamos el año actual
-            if "Y" not in fmt and "y" not in fmt:
-                dt = dt.replace(year=hoy.year)
+            if "Y" not in fmt and "y" not in fmt: dt = dt.replace(year=hoy.year)
             return tz.localize(dt)
-        except ValueError:
-            continue
-    
-    # Si todo falla, lo mandamos al final
+        except ValueError: continue
     return tz.localize(datetime(2099, 12, 31))
 
-def generar_badge_inteligente(prometido_dt, now_dt, estado_actual, pro_str):
-    if estado_actual == "PAUSA":
-        return f"<div class='badge badge-gray'>{pro_str}<br>PAUSADO</div>"
-    if estado_actual == "REPASO":
-        return f"<div class='badge badge-teal'>{pro_str}<br>REPASO</div>"
-
-    # Si es año 2099 (Error de fecha), mostramos el texto original en gris
+def generar_badge_inteligente(prometido_dt, now_dt, estado_actual):
+    # Formateamos la fecha LIMPIA siempre (dd/mm HH:MM)
     if prometido_dt.year == 2099:
-        return f"<div class='badge badge-gray'>{pro_str}</div>"
+        fecha_display = "--:--"
+    else:
+        # Si es hoy, solo hora. Si es otro día, Fecha + Hora
+        if prometido_dt.date() == now_dt.date():
+            fecha_display = prometido_dt.strftime("%H:%M")
+        else:
+            fecha_display = prometido_dt.strftime("%d/%m %H:%M")
 
+    # 1. Estados Manuales
+    if estado_actual == "PAUSA":
+        return f"<div class='badge badge-gray'>{fecha_display}<br>PAUSADO</div>"
+    if estado_actual == "REPASO":
+        return f"<div class='badge badge-teal'>{fecha_display}<br>REPASO</div>"
+    if prometido_dt.year == 2099:
+        return f"<div class='badge badge-gray'>S/D</div>"
+
+    # 2. Lógica Temporal
     es_hoy = prometido_dt.date() <= now_dt.date()
-    hora_str = prometido_dt.strftime("%H:%M")
     
     if not es_hoy:
-        return f"<div class='badge badge-blue'>{prometido_dt.strftime('%d/%m %H:%M')}<br>PRÓXIMO</div>"
+        return f"<div class='badge badge-blue'>{fecha_display}<br>PRÓXIMO</div>"
     
     diff = (prometido_dt - now_dt).total_seconds() / 60
-    if diff < 0: return f"<div class='badge badge-red'>{hora_str}<br>DEMORADO</div>"
-    elif diff <= 60: return f"<div class='badge badge-red'>{hora_str}<br>YA!</div>"
-    elif diff <= 120: return f"<div class='badge badge-yellow'>{hora_str}<br>ATENCIÓN</div>"
-    return f"<b>{hora_str}</b>"
+    if diff < 0: return f"<div class='badge badge-red'>{fecha_display}<br>DEMORADO</div>"
+    elif diff <= 60: return f"<div class='badge badge-red'>{fecha_display}<br>YA!</div>"
+    elif diff <= 120: return f"<div class='badge badge-yellow'>{fecha_display}<br>ATENCIÓN</div>"
+    return f"<b>{fecha_display}</b>"
+
+def generar_badge_finalizado(prometido_dt, fin_real_str, now_dt):
+    # Si no hay fecha prometida válida, no mostramos alerta
+    if prometido_dt.year == 2099: return ""
+    
+    # Intentamos parsear la hora de fin real (HH:MM)
+    try:
+        h, m = map(int, fin_real_str.split(':'))
+        fin_dt = now_dt.replace(hour=h, minute=m, second=0)
+    except:
+        return "" # Si no hay hora fin válida, no calculamos
+
+    # Comparamos: Si Fin > Prometido (+15 min tolerancia) -> Tarde
+    diff = (prometido_dt - fin_dt).total_seconds() / 60
+    
+    if diff < -15: # Se pasó por más de 15 mins
+        return f"<div class='badge badge-red' style='min-width:50px;'>{prometido_dt.strftime('%H:%M')}<br>TARDE</div>"
+    else:
+        return f"<div class='badge' style='background:#e0e0e0; color:#333; min-width:50px;'>{prometido_dt.strftime('%H:%M')}<br>OK</div>"
 
 def limpiar_asesor(nombre):
     if not nombre: return ""
@@ -157,9 +168,7 @@ def main():
         pro_raw = fila[IDX_PRO].upper()
         
         if not dom: continue
-        # Filtro de exclusión
         if any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
-        
         if busqueda and busqueda not in dom: continue
 
         f_celda = fila[IDX_FECHA]
@@ -167,8 +176,6 @@ def main():
         estado = fila[IDX_EST].strip().upper()
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
-        
-        # USAMOS EL NUEVO PROCESADOR FLEXIBLE
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
 
         item = {
@@ -180,14 +187,12 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # LÓGICA LAVADERO
         if not tiene_fin or estado in ["PAUSA", "REPASO"]:
             pendientes.append(item)
         else:
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
-        # LÓGICA TURNOS TALLER
         if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
@@ -201,9 +206,7 @@ def main():
     with tab1:
         st.subheader(f"Pendientes ({len(pendientes)})")
         if pendientes:
-            # Ordenamiento robuesto
             pendientes.sort(key=lambda x: x["pro_dt"])
-            
             cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
             h_p = st.columns(cols_p)
             h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
@@ -211,7 +214,8 @@ def main():
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    badge_html = generar_badge_inteligente(p['pro_dt'], now_dt, p['est'], p['pro_str'])
+                    # Badge con fecha LIMPIA
+                    badge_html = generar_badge_inteligente(p['pro_dt'], now_dt, p['est'])
                     c[0].markdown(badge_html, unsafe_allow_html=True)
                     c[1].write(f"**{p['dom']}**")
                     c[2].markdown(f"<span class='txt-truncado'>{p['cli']}</span>", unsafe_allow_html=True)
@@ -238,24 +242,33 @@ def main():
         st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
+            # Columnas ajustadas para dar espacio a la alerta (0.2 y 0.8 en la última)
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
             h_f = st.columns(cols_f)
             h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
             for t in finalizados_ver:
                 t['min_total'] = calcular_tiempo_neto(t)
+                hora_fin_real = t['fin2'] if t['fin2'] else t['fin']
                 with st.container():
                     r = st.columns(cols_f)
-                    r[0].write(t['ini']); r[1].write(t['fin2'] if t['fin2'] else t['fin']); r[2].write(f"{t['min_total']}'")
+                    r[0].write(t['ini']); r[1].write(hora_fin_real); r[2].write(f"{t['min_total']}'")
                     r[3].markdown(f"<b>{t['dom']}</b>", unsafe_allow_html=True)
                     r[4].markdown(f"<span class='txt-truncado'>{t['cli']}</span>", unsafe_allow_html=True)
                     r[5].markdown(f"<span class='txt-truncado'>{t['mod']}</span>", unsafe_allow_html=True)
                     r[6].markdown(f"<span class='txt-asesor'>{t['ase']}</span>", unsafe_allow_html=True)
                     with r[7]:
-                        c_chk, c_txt = st.columns([0.3, 0.7])
+                        # Espacio ajustado: Checkbox + Badge Alerta
+                        c_chk, c_txt = st.columns([0.2, 0.8])
                         with c_chk:
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']: hoja.update_cell(t['fila'], IDX_CTRL+1, "SI" if nk else ""); st.rerun()
-                        if t['ok']: c_txt.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                        with c_txt:
+                            if t['ok']: 
+                                st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            else: 
+                                # Alerta basada en Hora FIN vs Hora PROMETIDA
+                                alerta = generar_badge_finalizado(t['pro_dt'], hora_fin_real, now_dt)
+                                st.markdown(alerta, unsafe_allow_html=True)
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab2:
