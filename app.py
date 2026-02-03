@@ -87,14 +87,11 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
     es_hoy = prometido_dt.date() <= now_dt.date()
     if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
     
-    # LÓGICA CORREGIDA PARA PENDIENTES
     diff = (prometido_dt - now_dt).total_seconds() / 60
     
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
-    elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"     # Rojo si faltan 30 min o menos
-    elif diff <= 60: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>" # Amarillo si faltan 60 min o menos
-    
-    # Si falta más de 1 hora, se muestra normal (Blanco/Negro)
+    elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
+    elif diff <= 60: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>"
     return f"<b>{texto}</b>"
 
 def generar_badge_entrega(prometido_dt, now_dt):
@@ -103,7 +100,6 @@ def generar_badge_entrega(prometido_dt, now_dt):
 
     minutos_restantes = (prometido_dt - now_dt).total_seconds() / 60
     
-    # LÓGICA CORREGIDA PARA ENTREGA
     if minutos_restantes < 0:
         return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>DEMORADO</div>"
     elif minutos_restantes <= 30:
@@ -234,6 +230,11 @@ def main():
         st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
+            # --- NUEVA LÓGICA DE ORDENAMIENTO DE CASCADA ---
+            # 1. False (No tildado) va primero que True (Tildado).
+            # 2. Dentro de cada grupo, ordena por fecha prometida (urgencia).
+            finalizados_ver.sort(key=lambda x: (x['ok'], x['pro_dt']))
+            
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
             h_f = st.columns(cols_f)
             h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
