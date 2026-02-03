@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, date
+from datetime import datetime, timedelta
 import json
 import pytz
 import plotly.express as px
@@ -57,14 +57,12 @@ def procesar_fecha_flexible(val, hoy, tz):
     val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
     
-    # Caso hora sola (15:00) -> Asume hoy
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
             return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
         except: pass
         
-    # Caso fechas completas
     formatos = ["%d/%m/%Y %H:%M", "%d/%m/%y %H:%M", "%d/%m %H:%M", "%d/%m/%Y", "%d/%m"]
     for fmt in formatos:
         try:
@@ -89,10 +87,14 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
     es_hoy = prometido_dt.date() <= now_dt.date()
     if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
     
+    # LÓGICA CORREGIDA PARA PENDIENTES
     diff = (prometido_dt - now_dt).total_seconds() / 60
+    
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
-    elif diff <= 60: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
-    elif diff <= 120: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>"
+    elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"     # Rojo si faltan 30 min o menos
+    elif diff <= 60: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>" # Amarillo si faltan 60 min o menos
+    
+    # Si falta más de 1 hora, se muestra normal (Blanco/Negro)
     return f"<b>{texto}</b>"
 
 def generar_badge_entrega(prometido_dt, now_dt):
@@ -101,6 +103,7 @@ def generar_badge_entrega(prometido_dt, now_dt):
 
     minutos_restantes = (prometido_dt - now_dt).total_seconds() / 60
     
+    # LÓGICA CORREGIDA PARA ENTREGA
     if minutos_restantes < 0:
         return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>DEMORADO</div>"
     elif minutos_restantes <= 30:
