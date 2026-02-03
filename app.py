@@ -53,23 +53,51 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def procesar_prometido_completo(val, hoy, tz):
-    val = str(val).strip()
-    if not val or ":" not in val: return tz.localize(datetime(2099, 1, 1))
-    try:
-        if len(val) > 10: 
-            dt = datetime.strptime(val, "%d/%m/%Y %H:%M")
-        else:
+def procesar_fecha_flexible(val, hoy, tz):
+    """
+    Intenta leer la fecha en múltiples formatos para evitar errores de ordenamiento.
+    """
+    val = str(val).strip().replace("-", "/") # Normalizamos guiones a barras
+    if not val: return tz.localize(datetime(2099, 12, 31))
+
+    # Caso 1: Solo hora (Ej: 15:00) -> Asume hoy
+    if ":" in val and len(val) <= 5:
+        try:
             h, m = map(int, val.split(':'))
-            dt = datetime(hoy.year, hoy.month, hoy.day, h, m)
-        return tz.localize(dt)
-    except: return tz.localize(datetime(2099, 1, 1))
+            return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
+        except: pass
+
+    # Caso 2: Probar múltiples formatos de fecha
+    formatos = [
+        "%d/%m/%Y %H:%M",  # 04/02/2026 16:00
+        "%d/%m/%y %H:%M",  # 04/02/26 16:00 (Año corto)
+        "%d/%m %H:%M",     # 04/02 16:00 (Sin año, asume actual)
+        "%d/%m/%Y",        # Solo fecha completa
+        "%d/%m"            # Solo día y mes
+    ]
+
+    for fmt in formatos:
+        try:
+            dt = datetime.strptime(val, fmt)
+            # Si el formato no tenía año (ej: 04/02), agregamos el año actual
+            if "Y" not in fmt and "y" not in fmt:
+                dt = dt.replace(year=hoy.year)
+            return tz.localize(dt)
+        except ValueError:
+            continue
+    
+    # Si todo falla, lo mandamos al final
+    return tz.localize(datetime(2099, 12, 31))
 
 def generar_badge_inteligente(prometido_dt, now_dt, estado_actual, pro_str):
     if estado_actual == "PAUSA":
         return f"<div class='badge badge-gray'>{pro_str}<br>PAUSADO</div>"
     if estado_actual == "REPASO":
         return f"<div class='badge badge-teal'>{pro_str}<br>REPASO</div>"
+
+    # Si es año 2099 (Error de fecha), mostramos el texto original en gris
+    if prometido_dt.year == 2099:
+        return f"<div class='badge badge-gray'>{pro_str}</div>"
 
     es_hoy = prometido_dt.date() <= now_dt.date()
     hora_str = prometido_dt.strftime("%H:%M")
@@ -129,7 +157,7 @@ def main():
         pro_raw = fila[IDX_PRO].upper()
         
         if not dom: continue
-        # Filtro de exclusión de unidades que no se lavan
+        # Filtro de exclusión
         if any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         
         if busqueda and busqueda not in dom: continue
@@ -139,7 +167,9 @@ def main():
         estado = fila[IDX_EST].strip().upper()
         es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
         tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
-        dt_prometido = procesar_prometido_completo(fila[IDX_PRO], hoy_date, tz_ar)
+        
+        # USAMOS EL NUEVO PROCESADOR FLEXIBLE
+        dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
 
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -157,7 +187,7 @@ def main():
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
-        # LÓGICA TURNOS TALLER (Solo para la fecha seleccionada)
+        # LÓGICA TURNOS TALLER
         if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
@@ -171,7 +201,9 @@ def main():
     with tab1:
         st.subheader(f"Pendientes ({len(pendientes)})")
         if pendientes:
+            # Ordenamiento robuesto
             pendientes.sort(key=lambda x: x["pro_dt"])
+            
             cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
             h_p = st.columns(cols_p)
             h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
@@ -203,8 +235,7 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
-        # Aquí corregí la línea que daba error visual
-        st.markdown("---") 
+        st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
