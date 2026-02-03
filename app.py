@@ -134,26 +134,27 @@ def main():
         fecha_sel = st.date_input("Ver fecha:", hoy_date)
         f_str, f_str_cero = fecha_sel.strftime("%-d/%-m/%Y"), fecha_sel.strftime("%d/%m/%Y")
 
-    pendientes, finalizados_ver, turnos_eficiencia, historial_global = [], [], [], []
+    pendientes, finalizados_ver, turnos_eficiencia = [], [], []
 
-    # --- BUCLE ÚNICO DE PROCESAMIENTO ---
+    # --- BUCLE PRINCIPAL DE LECTURA ---
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 16: fila += [""] * (16 - len(fila))
         
         dom = fila[IDX_DOM].upper()
         pro_raw = fila[IDX_PRO].upper()
+        
         if not dom: continue
-        
-        # Filtro Global de Exclusión
+        # FILTRO GLOBAL DE EXCLUSIÓN (Aplica a todo)
         if any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
-        
-        estado = fila[IDX_EST].strip().upper()
+        if busqueda and busqueda not in dom: continue
+
         f_celda = fila[IDX_FECHA]
         f_fin_celda = fila[IDX_FECHA_FIN]
-        es_de_fecha_filtro = (f_str in f_celda) or (f_str_cero in f_celda)
-        tiene_fin_real = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
-        
+        estado = fila[IDX_EST].strip().upper()
+        es_de_fecha = (f_str in f_celda) or (f_str_cero in f_celda)
+        tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
+
         item = {
             "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro_dt": dt_prometido, "pro_str": fila[IDX_PRO], 
@@ -163,26 +164,15 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # 1. Clasificación Lavadero
-        if estado != "FINALIZADO" or not tiene_fin_real:
-            if not busqueda or busqueda in dom:
-                pendientes.append(item)
+        # Lógica Operativa (Pestaña 1)
+        if not tiene_fin or estado in ["PAUSA", "REPASO"]:
+            pendientes.append(item)
         else:
-            # Solo entra aquí si está FINALIZADO de verdad
-            if es_de_fecha_filtro or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
-                if not busqueda or busqueda in dom:
-                    finalizados_ver.append(item)
-            
-            # Guardar para el Historial (independiente del filtro de búsqueda o fecha lateral)
-            try:
-                f_hist_dt = datetime.strptime(f_celda.split()[0], "%d/%m/%Y")
-                t_neto = calcular_tiempo_neto(item)
-                if t_neto > 0:
-                    historial_global.append({"Fecha": f_hist_dt, "Mes": f_hist_dt.strftime("%Y-%m"), "Mins": t_neto})
-            except: pass
+            if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
+                finalizados_ver.append(item)
 
-        # 2. Lógica Turnos Taller
-        if es_de_fecha_filtro:
+        # Lógica Turnos Taller (Pestaña 4)
+        if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
                 vino = not ("NO VINO" in pro_raw or "NO VINO" in item['trabajo'])
@@ -190,18 +180,21 @@ def main():
                 es_serv = any(x in item['trabajo'] for x in palabras_serv)
                 turnos_eficiencia.append({"fila":i, "dom":dom, "cli":fila[IDX_CLI], "mod":fila[IDX_MOD], "ase":item['ase'], "dms":(hora_b != "13:00"), "vino":vino, "serv":es_serv, "rec":(fila[IDX_RECUPERO].upper() == "SI")})
 
-    tab1, tab2, tab3, tab4 = st.tabs(["🧽 Lavadero", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🚗 Operación", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
 
     with tab1:
         st.subheader(f"Pendientes ({len(pendientes)})")
         if pendientes:
             pendientes.sort(key=lambda x: x["pro_dt"])
             cols_p = [0.8, 0.8, 1.4, 1.4, 0.8, 1.2]
-            h_p = st.columns(cols_p); h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
+            h_p = st.columns(cols_p)
+            h_p[0].caption("ESTADO"); h_p[1].caption("DOMINIO"); h_p[2].caption("CLIENTE"); h_p[3].caption("MODELO"); h_p[4].caption("ASESOR"); h_p[5].caption("ACCIONES")
+
             for p in pendientes:
                 with st.container():
                     c = st.columns(cols_p)
-                    c[0].markdown(generar_badge_pendientes(p['pro_dt'], now_dt, p['est']), unsafe_allow_html=True)
+                    badge_html = generar_badge_pendientes(p['pro_dt'], now_dt, p['est'])
+                    c[0].markdown(badge_html, unsafe_allow_html=True)
                     c[1].write(f"**{p['dom']}**")
                     c[2].markdown(f"<span class='txt-truncado'>{p['cli']}</span>", unsafe_allow_html=True)
                     c[3].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
@@ -229,7 +222,8 @@ def main():
         if finalizados_ver:
             finalizados_ver.sort(key=lambda x: (x['ok'], x['pro_dt']))
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
-            h_f = st.columns(cols_f); h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
+            h_f = st.columns(cols_f)
+            h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
             for t in finalizados_ver:
                 t['min_total'] = calcular_tiempo_neto(t)
                 with st.container():
@@ -246,7 +240,9 @@ def main():
                             if nk != t['ok']: hoja.update_cell(t['fila'], IDX_CTRL+1, "SI" if nk else ""); st.rerun()
                         with c_txt:
                             if t['ok']: st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
-                            else: st.markdown(generar_badge_entrega(t['pro_dt'], now_dt), unsafe_allow_html=True)
+                            else: 
+                                alerta = generar_badge_entrega(t['pro_dt'], now_dt)
+                                st.markdown(alerta, unsafe_allow_html=True)
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
     with tab2:
@@ -261,11 +257,30 @@ def main():
 
     with tab3:
         st.subheader("📅 Historial Mensual")
-        if historial_global:
-            df_h = pd.DataFrame(historial_global)
-            col_sel, _ = st.columns([1, 4])
+        hist_list = []
+        # --- NUEVO BUCLE DE HISTORIAL CORREGIDO ---
+        for f in raw_data[1:]:
+            if len(f) >= 12 and f[IDX_FECHA]:
+                try:
+                    # 1. Filtro de Exclusión (Igual que arriba)
+                    pro_raw_h = f[IDX_PRO].upper()
+                    if any(x in pro_raw_h for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
+                    
+                    # 2. Filtro de Datos Completos
+                    # Solo contamos si tiene fecha válida y tiempos de inicio/fin cargados
+                    f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                    item_h = {'ini':f[IDX_INI1],'fin':f[IDX_FIN1],'ini2':f[IDX_INI2],'fin2':f[IDX_FIN2]}
+                    m = calcular_tiempo_neto(item_h)
+                    
+                    # 3. Solo sumamos si efectivamente hubo tiempo de lavado (>0)
+                    if m > 0: 
+                        hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": m})
+                except: continue
+        
+        if hist_list:
+            df_h = pd.DataFrame(hist_list)
+            col_sel, col_vacia = st.columns([1, 4])
             with col_sel: m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
@@ -273,20 +288,44 @@ def main():
             fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_hist, use_container_width=True)
             st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y')), use_container_width=True, hide_index=True)
-        else: st.warning("No hay datos históricos registrados.")
+
+            st.markdown("---"); st.subheader(f"📊 Resumen Taller - {m_sel}")
+            t_mes = []
+            for f in raw_data[1:]:
+                if len(f) >= 16 and f[IDX_FECHA]:
+                    try:
+                        f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                        if f_dt.strftime("%Y-%m") == m_sel:
+                            h_b = f[IDX_ING_DMS].strip()
+                            if h_b != "":
+                                v = not ("NO VINO" in f[IDX_PRO].upper() or "NO VINO" in f[IDX_TRABAJO].upper())
+                                t_mes.append({"Fecha": f[IDX_FECHA].split()[0], "DMS": (h_b != "13:00"), "Vino": v, "Rec": (f[IDX_RECUPERO].upper() == "SI")})
+                    except: continue
+            if t_mes:
+                df_tmes = pd.DataFrame(t_mes).groupby('Fecha').agg(Turnos_DMS=('DMS','sum'), Asistencia=('Vino','sum'), Recuperados=('Rec','sum')).reset_index()
+                st.dataframe(df_tmes.sort_values('Fecha', ascending=False), use_container_width=True, hide_index=True)
 
     with tab4:
         st.subheader(f"Gestión de Turnos - {fecha_sel.strftime('%d/%m/%Y')}")
         if turnos_eficiencia:
             df_t = pd.DataFrame(turnos_eficiencia); prog = df_t[df_t['dms'] == True]; aus = prog[prog['vino'] == False]
-            c1, c2, c3, c4 = st.columns(4); c1.metric("Turnos DMS", len(prog)); c2.metric("Show-up", f"{int(len(prog[prog['vino']])/len(prog)*100)}%" if len(prog)>0 else "0%"); c3.metric("Adicionales", len(df_t[~df_t['dms']])); c4.metric("Mantenimientos", len(df_t[df_t['serv']]))
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Turnos DMS", len(prog)); c2.metric("Show-up", f"{int(len(prog[prog['vino']])/len(prog)*100)}%" if len(prog)>0 else "0%")
+            c3.metric("Adicionales", len(df_t[~df_t['dms']])); c4.metric("Mantenimientos", len(df_t[df_t['serv']]))
             st.markdown("---"); st.subheader("📞 Recupero de Ausentes")
             for _, a in aus.iterrows():
                 with st.container():
                     r = st.columns([0.8, 1.5, 1.5, 0.8, 1, 1.2])
-                    r[0].write(f"**{a['dom']}**"); r[1].write(f"<small>{a['cli']}</small>", unsafe_allow_html=True); r[2].write(f"<small>{a['mod']}</small>", unsafe_allow_html=True); r[3].write(a['ase']); r[4].write("❌ PENDIENTE" if not a['rec'] else "✅ RECUPERADO")
+                    r[0].write(f"**{a['dom']}**"); r[1].write(f"<small>{a['cli']}</small>", unsafe_allow_html=True); r[2].write(f"<small>{a['mod']}</small>", unsafe_allow_html=True); r[3].write(a['ase'])
+                    r[4].write("❌ PENDIENTE" if not a['rec'] else "✅ RECUPERADO")
                     if not a['rec'] and r[5].button("Recuperar", key=f"rc_{a['fila']}"):
                         hoja.update_cell(a['fila'], IDX_RECUPERO+1, "SI"); st.rerun()
+            st.markdown("---")
+            g1, g2 = st.columns(2)
+            with g1: st.plotly_chart(px.pie(df_t, names='serv', title="Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
+            with g2: 
+                if not aus.empty:
+                    st.plotly_chart(px.bar(x=["Recuperados", "Pendientes"], y=[len(aus[aus['rec']]), len(aus[~aus['rec']])], title="Gestión de Recupero", color=["Rec", "Pen"], color_discrete_map={"Rec":"#2e7d32", "Pen":"#d32f2f"}), use_container_width=True)
         else: st.info("Sin turnos detectados hoy.")
 
 if __name__ == "__main__":
