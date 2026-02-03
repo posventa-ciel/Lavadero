@@ -174,14 +174,12 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # LÓGICA LAVADERO
         if not tiene_fin or estado in ["PAUSA", "REPASO"]:
             pendientes.append(item)
         else:
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
-        # LÓGICA TURNOS TALLER
         if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
@@ -230,9 +228,7 @@ def main():
         st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
-            # --- NUEVA LÓGICA DE ORDENAMIENTO DE CASCADA ---
-            # 1. False (No tildado) va primero que True (Tildado).
-            # 2. Dentro de cada grupo, ordena por fecha prometida (urgencia).
+            # ORDENAMIENTO CASCADA: 1) Tildado? (Falso arriba), 2) Hora (Urgentes arriba)
             finalizados_ver.sort(key=lambda x: (x['ok'], x['pro_dt']))
             
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
@@ -281,25 +277,35 @@ def main():
                     m = calcular_tiempo_neto(item_h)
                     hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
                 except: continue
+        
         if hist_list:
-            df_h = pd.DataFrame(hist_list); m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            df_h = pd.DataFrame(hist_list)
+            # Filtro pequeño
+            col_sel, col_vacia = st.columns([1, 4])
+            with col_sel:
+                m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
+            
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
             fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_hist, use_container_width=True)
+            
             st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y')), use_container_width=True, hide_index=True)
 
             st.markdown("---"); st.subheader(f"📊 Resumen Taller - {m_sel}")
             t_mes = []
             for f in raw_data[1:]:
-                if len(f) >= 16 and m_sel in f[IDX_FECHA]:
+                # CORRECCIÓN DEL FILTRO DE TALLER: Parseo real de fecha
+                if len(f) >= 16 and f[IDX_FECHA]:
                     try:
-                        h_b = f[IDX_ING_DMS].strip()
-                        if h_b != "":
-                            v = not ("NO VINO" in f[IDX_PRO].upper() or "NO VINO" in f[IDX_TRABAJO].upper())
-                            t_mes.append({"Fecha": f[IDX_FECHA].split()[0], "DMS": (h_b != "13:00"), "Vino": v, "Rec": (f[IDX_RECUPERO].upper() == "SI")})
+                        f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
+                        if f_dt.strftime("%Y-%m") == m_sel: # Comparación estricta de mes
+                            h_b = f[IDX_ING_DMS].strip()
+                            if h_b != "":
+                                v = not ("NO VINO" in f[IDX_PRO].upper() or "NO VINO" in f[IDX_TRABAJO].upper())
+                                t_mes.append({"Fecha": f[IDX_FECHA].split()[0], "DMS": (h_b != "13:00"), "Vino": v, "Rec": (f[IDX_RECUPERO].upper() == "SI")})
                     except: continue
             if t_mes:
                 df_tmes = pd.DataFrame(t_mes).groupby('Fecha').agg(Turnos_DMS=('DMS','sum'), Asistencia=('Vino','sum'), Recuperados=('Rec','sum')).reset_index()
