@@ -56,13 +56,11 @@ def conectar_sheet():
 def procesar_fecha_flexible(val, hoy, tz):
     val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
-    
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
             return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
         except: pass
-        
     formatos = ["%d/%m/%Y %H:%M", "%d/%m/%y %H:%M", "%d/%m %H:%M", "%d/%m/%Y", "%d/%m"]
     for fmt in formatos:
         try:
@@ -70,7 +68,6 @@ def procesar_fecha_flexible(val, hoy, tz):
             if "Y" not in fmt and "y" not in fmt: dt = dt.replace(year=hoy.year)
             return tz.localize(dt)
         except ValueError: continue
-        
     return tz.localize(datetime(2099, 12, 31))
 
 def formatear_fecha_corta(dt, now_dt):
@@ -83,12 +80,11 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
     if estado_actual == "PAUSA": return f"<div class='badge badge-gray'>{texto}<br>PAUSADO</div>"
     if estado_actual == "REPASO": return f"<div class='badge badge-teal'>{texto}<br>REPASO</div>"
     if prometido_dt.year == 2099: return f"<div class='badge badge-gray'>{texto}</div>"
-
+    
     es_hoy = prometido_dt.date() <= now_dt.date()
     if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
     
     diff = (prometido_dt - now_dt).total_seconds() / 60
-    
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
     elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
     elif diff <= 60: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>"
@@ -97,17 +93,11 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
 def generar_badge_entrega(prometido_dt, now_dt):
     texto = formatear_fecha_corta(prometido_dt, now_dt)
     if prometido_dt.year == 2099: return ""
-
     minutos_restantes = (prometido_dt - now_dt).total_seconds() / 60
-    
-    if minutos_restantes < 0:
-        return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>DEMORADO</div>"
-    elif minutos_restantes <= 30:
-        return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>URGENTE</div>"
-    elif minutos_restantes <= 60:
-        return f"<div class='badge badge-yellow' style='min-width:60px; color:black;'>{texto}<br>ATENCIÓN</div>"
-    else:
-        return f"<div class='badge' style='background:#e0e0e0; color:#333; min-width:60px;'>{texto}<br>A TIEMPO</div>"
+    if minutos_restantes < 0: return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>DEMORADO</div>"
+    elif minutos_restantes <= 30: return f"<div class='badge badge-red' style='min-width:60px;'>{texto}<br>URGENTE</div>"
+    elif minutos_restantes <= 60: return f"<div class='badge badge-yellow' style='min-width:60px; color:black;'>{texto}<br>ATENCIÓN</div>"
+    else: return f"<div class='badge' style='background:#e0e0e0; color:#333; min-width:60px;'>{texto}<br>A TIEMPO</div>"
 
 def limpiar_asesor(nombre):
     if not nombre: return ""
@@ -174,9 +164,12 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
+        # --- LÓGICA RESTAURADA Y ROBUSTA ---
+        # 1. ¿Está Pendiente? (No tiene hora fin O está en Pausa/Repaso)
         if not tiene_fin or estado in ["PAUSA", "REPASO"]:
             pendientes.append(item)
         else:
+            # 2. ¿Está Finalizado? (Tiene hora fin Y coincide con la fecha del filtro)
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
@@ -228,9 +221,8 @@ def main():
         st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
-            # ORDENAMIENTO CASCADA: 1) Tildado? (Falso arriba), 2) Hora (Urgentes arriba)
+            # Ordenamiento Cascada: 1) NO Tildado, 2) Fecha Urgente
             finalizados_ver.sort(key=lambda x: (x['ok'], x['pro_dt']))
-            
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
             h_f = st.columns(cols_f)
             h_f[0].caption("INI"); h_f[1].caption("FIN"); h_f[2].caption("T."); h_f[3].caption("DOM"); h_f[4].caption("CLIENTE"); h_f[5].caption("MODELO"); h_f[6].caption("ASESOR"); h_f[7].caption("ESTADO")
@@ -249,8 +241,7 @@ def main():
                             nk = st.checkbox("", value=t['ok'], key=f"ck{t['fila']}", label_visibility="collapsed")
                             if nk != t['ok']: hoja.update_cell(t['fila'], IDX_CTRL+1, "SI" if nk else ""); st.rerun()
                         with c_txt:
-                            if t['ok']: 
-                                st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
+                            if t['ok']: st.markdown("<span class='badge-ok'>ENTREGADO</span>", unsafe_allow_html=True)
                             else: 
                                 alerta = generar_badge_entrega(t['pro_dt'], now_dt)
                                 st.markdown(alerta, unsafe_allow_html=True)
@@ -275,33 +266,27 @@ def main():
                     f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
                     item_h = {'ini':f[IDX_INI1],'fin':f[IDX_FIN1],'ini2':f[IDX_INI2],'fin2':f[IDX_FIN2]}
                     m = calcular_tiempo_neto(item_h)
-                    hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": max(0, int(m))})
+                    if m > 0: hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": m})
                 except: continue
-        
         if hist_list:
             df_h = pd.DataFrame(hist_list)
-            # Filtro pequeño
             col_sel, col_vacia = st.columns([1, 4])
-            with col_sel:
-                m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            
+            with col_sel: m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
             df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
             fig_hist = go.Figure()
             fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
             fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
             fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig_hist, use_container_width=True)
-            
             st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y')), use_container_width=True, hide_index=True)
 
             st.markdown("---"); st.subheader(f"📊 Resumen Taller - {m_sel}")
             t_mes = []
             for f in raw_data[1:]:
-                # CORRECCIÓN DEL FILTRO DE TALLER: Parseo real de fecha
                 if len(f) >= 16 and f[IDX_FECHA]:
                     try:
                         f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
-                        if f_dt.strftime("%Y-%m") == m_sel: # Comparación estricta de mes
+                        if f_dt.strftime("%Y-%m") == m_sel:
                             h_b = f[IDX_ING_DMS].strip()
                             if h_b != "":
                                 v = not ("NO VINO" in f[IDX_PRO].upper() or "NO VINO" in f[IDX_TRABAJO].upper())
