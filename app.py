@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime, date
 import json
 import pytz
 import plotly.express as px
@@ -80,10 +80,8 @@ def generar_badge_pendientes(prometido_dt, now_dt, estado_actual):
     if estado_actual == "PAUSA": return f"<div class='badge badge-gray'>{texto}<br>PAUSADO</div>"
     if estado_actual == "REPASO": return f"<div class='badge badge-teal'>{texto}<br>REPASO</div>"
     if prometido_dt.year == 2099: return f"<div class='badge badge-gray'>{texto}</div>"
-    
     es_hoy = prometido_dt.date() <= now_dt.date()
     if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
-    
     diff = (prometido_dt - now_dt).total_seconds() / 60
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
     elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
@@ -138,6 +136,7 @@ def main():
 
     pendientes, finalizados_ver, turnos_eficiencia = [], [], []
 
+    # --- BUCLE PRINCIPAL DE LECTURA ---
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 16: fila += [""] * (16 - len(fila))
         
@@ -145,6 +144,7 @@ def main():
         pro_raw = fila[IDX_PRO].upper()
         
         if not dom: continue
+        # FILTRO GLOBAL DE EXCLUSIÓN (Aplica a todo)
         if any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
         if busqueda and busqueda not in dom: continue
 
@@ -164,15 +164,14 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # --- LÓGICA RESTAURADA Y ROBUSTA ---
-        # 1. ¿Está Pendiente? (No tiene hora fin O está en Pausa/Repaso)
+        # Lógica Operativa (Pestaña 1)
         if not tiene_fin or estado in ["PAUSA", "REPASO"]:
             pendientes.append(item)
         else:
-            # 2. ¿Está Finalizado? (Tiene hora fin Y coincide con la fecha del filtro)
             if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                 finalizados_ver.append(item)
 
+        # Lógica Turnos Taller (Pestaña 4)
         if es_de_fecha:
             hora_b = fila[IDX_ING_DMS].strip()
             if hora_b != "":
@@ -221,7 +220,6 @@ def main():
         st.markdown("---")
         st.subheader(f"Finalizados ({len(finalizados_ver)})")
         if finalizados_ver:
-            # Ordenamiento Cascada: 1) NO Tildado, 2) Fecha Urgente
             finalizados_ver.sort(key=lambda x: (x['ok'], x['pro_dt']))
             cols_f = [0.5, 0.5, 0.5, 0.8, 1.4, 1.4, 0.7, 1.2]
             h_f = st.columns(cols_f)
@@ -260,14 +258,25 @@ def main():
     with tab3:
         st.subheader("📅 Historial Mensual")
         hist_list = []
+        # --- NUEVO BUCLE DE HISTORIAL CORREGIDO ---
         for f in raw_data[1:]:
             if len(f) >= 12 and f[IDX_FECHA]:
                 try:
+                    # 1. Filtro de Exclusión (Igual que arriba)
+                    pro_raw_h = f[IDX_PRO].upper()
+                    if any(x in pro_raw_h for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"]): continue
+                    
+                    # 2. Filtro de Datos Completos
+                    # Solo contamos si tiene fecha válida y tiempos de inicio/fin cargados
                     f_dt = datetime.strptime(f[IDX_FECHA].split()[0], "%d/%m/%Y")
                     item_h = {'ini':f[IDX_INI1],'fin':f[IDX_FIN1],'ini2':f[IDX_INI2],'fin2':f[IDX_FIN2]}
                     m = calcular_tiempo_neto(item_h)
-                    if m > 0: hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": m})
+                    
+                    # 3. Solo sumamos si efectivamente hubo tiempo de lavado (>0)
+                    if m > 0: 
+                        hist_list.append({"Fecha": f_dt, "Mes": f_dt.strftime("%Y-%m"), "Mins": m})
                 except: continue
+        
         if hist_list:
             df_h = pd.DataFrame(hist_list)
             col_sel, col_vacia = st.columns([1, 4])
