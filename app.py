@@ -132,16 +132,17 @@ def main():
         
         f_ingreso_raw = fila[IDX_FECHA].strip()
         hora_recep_raw = fila[IDX_ING_DMS].strip()
-        
-        # --- FILTRO ANTI-FILAS VACÍAS ---
-        if not f_ingreso_raw and not hora_recep_raw: continue
+
+        # --- FILTRO MAESTRO: Si no hay FECHA, es fila vacía ---
+        if not f_ingreso_raw: continue
 
         dom_raw = fila[IDX_DOM].upper().strip()
         display_dom = dom_raw if dom_raw else "S/D"
-        pro_raw = fila[IDX_PRO].upper().strip()
         
+        # Filtro de búsqueda visual
         if busqueda and busqueda not in display_dom: continue
 
+        pro_raw = fila[IDX_PRO].upper().strip()
         estado = fila[IDX_EST].strip().upper()
         f_fin_celda = fila[IDX_FECHA_FIN].strip()
         es_de_fecha = (f_str in f_ingreso_raw) or (f_str_cero in f_ingreso_raw)
@@ -149,9 +150,9 @@ def main():
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
 
         try:
-            f_ing_dt = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
+            f_dt_obj = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
             h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
-            f_ing_display = f"{f_ing_dt.strftime('%d/%m')} {h_ing}"
+            f_ing_display = f"{f_dt_obj.strftime('%d/%m')} {h_ing}"
         except: f_ing_display = f_ingreso_raw
 
         item = {
@@ -163,9 +164,10 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # 1. Lógica Lavadero
+        # --- 1. LAVADERO (Excluye si dice NO SE LAVA/NO VINO) ---
         no_se_lava = any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"])
-        if not no_se_lava and f_ingreso_raw:
+        if not no_se_lava:
+            # Lógica de Pendientes IGUAL A TU CÓDIGO ORIGINAL
             if not tiene_fin or estado in ["PAUSA", "REPASO"]:
                 pendientes.append(item)
             else:
@@ -179,12 +181,10 @@ def main():
                     if t_n > 0: historial_global.append({"Fecha": f_hist_dt, "Mes": f_hist_dt.strftime("%Y-%m"), "Mins": t_n})
                 except: pass
 
-        # 2. Eficiencia Turnos (Taller)
+        # --- 2. EFICIENCIA TALLER (Si tiene Hora Recepción, cuenta) ---
         if es_de_fecha and hora_recep_raw:
             vino_real = "NO VINO" not in pro_raw
             es_dms = (hora_recep_raw != "13:00")
-            
-            # Búsqueda de Servicios (KM, SERV, MANT, etc.)
             txt_t = item['trabajo']
             palabras_serv = ["SERV", "KM", "MANT", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"]
             es_servicio = any(x in txt_t for x in palabras_serv)
@@ -213,6 +213,7 @@ def main():
                     c[4].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[5].write(p['ase'])
                     with c[6]:
+                        # --- LÓGICA BOTONES ORIGINAL ---
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "LAVANDO"); st.rerun()
@@ -222,6 +223,12 @@ def main():
                                 hoja.update_cell(p['fila'], IDX_FIN1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "PAUSA"); st.rerun()
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
+                        elif p['est'] == "PAUSA":
+                            if st.button("🔄", key=f"r{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_INI2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "REPASO"); st.rerun()
+                        elif p['est'] == "REPASO":
+                            if st.button("🏁", key=f"f2{p['fila']}"):
+                                hoja.update_cell(p['fila'], IDX_FIN2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
@@ -309,7 +316,6 @@ def main():
             g1, g2 = st.columns(2)
             with g1: st.plotly_chart(px.pie(df_t, names='vino', title="Presentes vs Ausentes", color_discrete_sequence=['#2e7d32', '#d32f2f']), use_container_width=True)
             with g2: st.plotly_chart(px.pie(df_t, names='serv', title="Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
-        else: st.info("Sin datos de taller para esta fecha.")
 
 if __name__ == "__main__":
     main()
