@@ -132,12 +132,11 @@ def main():
         
         f_ingreso_raw = fila[IDX_FECHA].strip()
         hora_recep_raw = fila[IDX_ING_DMS].strip()
-        dom_raw = fila[IDX_DOM].upper().strip()
-        cli_raw = fila[IDX_CLI].strip()
         
-        # --- FILTRO 1: Si no tiene fecha ni hora recepcion, es fila vacia ---
+        # --- FILTRO ANTI-FILAS VACÍAS ---
         if not f_ingreso_raw and not hora_recep_raw: continue
 
+        dom_raw = fila[IDX_DOM].upper().strip()
         display_dom = dom_raw if dom_raw else "S/D"
         pro_raw = fila[IDX_PRO].upper().strip()
         
@@ -146,6 +145,7 @@ def main():
         estado = fila[IDX_EST].strip().upper()
         f_fin_celda = fila[IDX_FECHA_FIN].strip()
         es_de_fecha = (f_str in f_ingreso_raw) or (f_str_cero in f_ingreso_raw)
+        tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
 
         try:
@@ -163,27 +163,28 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # --- LÓGICA LAVADERO ---
+        # 1. Lógica Lavadero
         no_se_lava = any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"])
         if not no_se_lava and f_ingreso_raw:
-            # SI NO ESTÁ FINALIZADO, ES PENDIENTE. (Independiente de si tiene FIN1 o no)
-            if estado != "FINALIZADO":
+            if not tiene_fin or estado in ["PAUSA", "REPASO"]:
                 pendientes.append(item)
             else:
                 if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                     finalizados_ver.append(item)
                 
-                # Historial
+                # Historial Mensual
                 try:
                     f_hist_dt = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
                     t_n = calcular_tiempo_neto(item)
                     if t_n > 0: historial_global.append({"Fecha": f_hist_dt, "Mes": f_hist_dt.strftime("%Y-%m"), "Mins": t_n})
                 except: pass
 
-        # --- LÓGICA EFICIENCIA TALLER ---
+        # 2. Eficiencia Turnos (Taller)
         if es_de_fecha and hora_recep_raw:
             vino_real = "NO VINO" not in pro_raw
             es_dms = (hora_recep_raw != "13:00")
+            
+            # Búsqueda de Servicios (KM, SERV, MANT, etc.)
             txt_t = item['trabajo']
             palabras_serv = ["SERV", "KM", "MANT", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"]
             es_servicio = any(x in txt_t for x in palabras_serv)
@@ -212,30 +213,15 @@ def main():
                     c[4].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[5].write(p['ase'])
                     with c[6]:
-                        # --- LÓGICA DE BOTONES ROBUSTA (Basada en Horarios, no solo Estado) ---
-                        
-                        # 1. No arrancó (No tiene INI1)
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "LAVANDO"); st.rerun()
-                        
-                        # 2. Arrancó (Tiene INI1) y NO paró (No tiene FIN1) -> Lavando
-                        elif not p['fin']:
+                        elif not (p['fin'] or p['fin2']):
                             cb = st.columns(2)
                             if cb[0].button("⏸️", key=f"p{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "PAUSA"); st.rerun()
                             if cb[1].button("🏁", key=f"f{p['fila']}"):
                                 hoja.update_cell(p['fila'], IDX_FIN1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
-                        
-                        # 3. Paró (Tiene FIN1) pero NO retomó (No tiene INI2) -> Está en Pausa
-                        elif not p['ini2']:
-                             if st.button("🔄", key=f"r{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_INI2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "REPASO"); st.rerun()
-                        
-                        # 4. Retomó (Tiene INI2) pero NO terminó (No tiene FIN2) -> Está en Repaso
-                        elif not p['fin2']:
-                             if st.button("🏁", key=f"f2{p['fila']}"):
-                                hoja.update_cell(p['fila'], IDX_FIN2+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "FINALIZADO"); hoja.update_cell(p['fila'], IDX_FECHA_FIN+1, hoy_str); st.rerun()
                 st.markdown("<div class='compact-row'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
