@@ -134,10 +134,12 @@ def main():
         
         dom = fila[IDX_DOM].upper().strip()
         pro_raw = fila[IDX_PRO].upper().strip()
-        if not dom: continue
         
-        # Filtro de búsqueda (siempre aplica)
-        if busqueda and busqueda not in dom: continue
+        # Si no hay dominio, ponemos "S/D" pero NO cortamos el bucle
+        display_dom = dom if dom else "S/D"
+        
+        # Filtro de búsqueda (ahora contempla S/D)
+        if busqueda and busqueda not in display_dom: continue
 
         f_celda = fila[IDX_FECHA].strip()
         f_fin_celda = fila[IDX_FECHA_FIN].strip()
@@ -153,7 +155,7 @@ def main():
         except: f_ing_display = f_celda
 
         item = {
-            "fila": i, "dom": dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
+            "fila": i, "dom": display_dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
             "pro_dt": dt_prometido, "pro_str": fila[IDX_PRO], "ingreso": f_ing_display,
             "ini": fila[IDX_INI1], "fin": fila[IDX_FIN1],
             "ini2": fila[IDX_INI2], "fin2": fila[IDX_FIN2], 
@@ -161,7 +163,7 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # --- 1. LÓGICA LAVADERO (Solo unidades que se lavan) ---
+        # --- 1. LÓGICA LAVADERO ---
         no_se_lava = any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"])
         if not no_se_lava:
             if not tiene_fin or estado in ["PAUSA", "REPASO"]:
@@ -178,18 +180,20 @@ def main():
                         if t_n > 0: historial_global.append({"Fecha": f_h_dt, "Mes": f_h_dt.strftime("%Y-%m"), "Mins": t_n})
                 except: pass
 
-        # --- 2. LÓGICA EFICIENCIA TALLER (Toda unidad con hora de recepción) ---
+        # --- 2. LÓGICA EFICIENCIA TALLER ---
         if es_de_fecha:
             hora_recep = fila[IDX_ING_DMS].strip()
-            # REGLA ORO: Si tiene hora de recepción, es un turno de taller.
             if hora_recep != "":
                 vino_real = not ("NO VINO" in pro_raw)
                 es_dms = (hora_recep != "13:00")
+                
+                # Búsqueda mejorada de Servicios de mantenimiento
+                desc_trabajo = item['trabajo']
                 palabras_serv = ["SERV", "KM", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K", "MANT"]
-                es_serv = any(x in item['trabajo'] for x in palabras_serv)
+                es_serv = any(x in desc_trabajo for x in palabras_serv)
                 
                 turnos_eficiencia.append({
-                    "fila":i, "dom":dom, "cli":fila[IDX_CLI], "mod":fila[IDX_MOD], 
+                    "fila":i, "dom":display_dom, "cli":fila[IDX_CLI], "mod":fila[IDX_MOD], 
                     "ase":item['ase'], "dms":es_dms, "vino":vino_real, 
                     "serv":es_serv, "rec":(fila[IDX_RECUPERO].upper() == "SI")
                 })
@@ -265,20 +269,6 @@ def main():
             with col_g2: st.plotly_chart(px.pie(df_hoy, names='ase', title="Lavados por Asesor"), use_container_width=True)
         else: st.info("Sin datos de hoy.")
 
-    with tab3:
-        st.subheader("📅 Historial Mensual")
-        if historial_global:
-            df_h = pd.DataFrame(historial_global)
-            col_sel, _ = st.columns([1, 4])
-            with col_sel: m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
-            fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
-            fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(fig_hist, use_container_width=True)
-            st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y')), use_container_width=True, hide_index=True)
-
     with tab4:
         st.subheader(f"Gestión de Turnos - {fecha_sel.strftime('%d/%m/%Y')}")
         if turnos_eficiencia:
@@ -306,7 +296,9 @@ def main():
                 st.markdown("### 📋 Resumen por Tipo")
                 st.write(f"DMS Programados: {len(df_t[df_t['dms']])}")
                 st.write(f"Adicionales (13:00): {len(df_t[~df_t['dms']])}")
-                st.write(f"Servicios Mantenimiento: {len(df_t[df_t['serv']])}")
+                # Ahora mostramos solo los servicios de los que SÍ vinieron (si te parece más útil)
+                serv_vinieron = len(vin_df[vin_df['serv'] == True])
+                st.write(f"Servicios de Mantenimiento (Presentes): {serv_vinieron}")
         else: st.info("Sin datos para esta fecha.")
 
 if __name__ == "__main__":
