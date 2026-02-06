@@ -125,21 +125,22 @@ def main():
         fecha_sel = st.date_input("Ver fecha:", hoy_date)
         f_str, f_str_cero = fecha_sel.strftime("%-d/%-m/%Y"), fecha_sel.strftime("%d/%m/%Y")
 
-    pendientes, finalizados_ver, turnos_eficiencia, historial_global = [], [], [], []
+    pendientes, finalizados_ver, turnos_eficiencia = [], [], []
+    historial_global = [] # Lavadero
+    historial_taller = [] # Taller (Nueva lista para indicadores)
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 16: fila += [""] * (16 - len(fila))
         
         f_ingreso_raw = fila[IDX_FECHA].strip()
         hora_recep_raw = fila[IDX_ING_DMS].strip()
-
-        # --- FILTRO MAESTRO: Si no hay FECHA, es fila vacía ---
-        if not f_ingreso_raw: continue
+        
+        # --- FILTRO MAESTRO (EL QUE FUNCIONA): Si no tiene ni fecha ni hora, afuera ---
+        if not f_ingreso_raw and not hora_recep_raw: continue
 
         dom_raw = fila[IDX_DOM].upper().strip()
         display_dom = dom_raw if dom_raw else "S/D"
         
-        # Filtro de búsqueda visual
         if busqueda and busqueda not in display_dom: continue
 
         pro_raw = fila[IDX_PRO].upper().strip()
@@ -150,10 +151,12 @@ def main():
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
 
         try:
-            f_dt_obj = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
+            f_ing_dt = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
             h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
-            f_ing_display = f"{f_dt_obj.strftime('%d/%m')} {h_ing}"
-        except: f_ing_display = f_ingreso_raw
+            f_ing_display = f"{f_ing_dt.strftime('%d/%m')} {h_ing}"
+        except: 
+            f_ing_display = f_ingreso_raw
+            f_ing_dt = None # Si falla, es None
 
         item = {
             "fila": i, "dom": display_dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -164,36 +167,46 @@ def main():
             "f_fin_real": f_fin_celda, "trabajo": fila[IDX_TRABAJO].upper()
         }
 
-        # --- 1. LAVADERO (Excluye si dice NO SE LAVA/NO VINO) ---
+        # --- 1. LAVADERO ---
         no_se_lava = any(x in pro_raw for x in ["NO SE LAVA", "NO VINO", "SIN TURNO"])
-        if not no_se_lava:
-            # Lógica de Pendientes IGUAL A TU CÓDIGO ORIGINAL
+        if not no_se_lava and f_ingreso_raw:
             if not tiene_fin or estado in ["PAUSA", "REPASO"]:
                 pendientes.append(item)
             else:
                 if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                     finalizados_ver.append(item)
                 
-                # Historial Mensual
-                try:
-                    f_hist_dt = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
+                # Historial Lavadero
+                if f_ing_dt:
                     t_n = calcular_tiempo_neto(item)
-                    if t_n > 0: historial_global.append({"Fecha": f_hist_dt, "Mes": f_hist_dt.strftime("%Y-%m"), "Mins": t_n})
-                except: pass
+                    if t_n > 0: historial_global.append({"Fecha": f_ing_dt, "Mes": f_ing_dt.strftime("%Y-%m"), "Mins": t_n})
 
-        # --- 2. EFICIENCIA TALLER (Si tiene Hora Recepción, cuenta) ---
-        if es_de_fecha and hora_recep_raw:
+        # --- 2. TALLER (Eficiencia + Historial) ---
+        if hora_recep_raw:
             vino_real = "NO VINO" not in pro_raw
             es_dms = (hora_recep_raw != "13:00")
             txt_t = item['trabajo']
             palabras_serv = ["SERV", "KM", "MANT", "10K", "20K", "30K", "40K", "50K", "60K", "70K", "80K", "90K", "100K"]
             es_servicio = any(x in txt_t for x in palabras_serv)
+            es_recuperado = (fila[IDX_RECUPERO].upper() == "SI")
             
-            turnos_eficiencia.append({
-                "fila": i, "dom": display_dom, "cli": fila[IDX_CLI], "mod": fila[IDX_MOD], 
-                "ase": item['ase'], "dms": es_dms, "vino": vino_real, 
-                "serv": es_servicio, "rec": (fila[IDX_RECUPERO].upper() == "SI")
-            })
+            # Para Pestaña 4 (Turnos del Día)
+            if es_de_fecha:
+                turnos_eficiencia.append({
+                    "fila": i, "dom": display_dom, "cli": fila[IDX_CLI], "mod": fila[IDX_MOD], 
+                    "ase": item['ase'], "dms": es_dms, "vino": vino_real, 
+                    "serv": es_servicio, "rec": es_recuperado
+                })
+
+            # Para Pestaña 3 (Historial Acumulado) - Solo si tenemos fecha válida
+            if f_ing_dt:
+                historial_taller.append({
+                    "Mes": f_ing_dt.strftime("%Y-%m"),
+                    "DMS": es_dms,
+                    "Vino": vino_real,
+                    "Serv": es_servicio,
+                    "Rec": es_recuperado
+                })
 
     tab1, tab2, tab3, tab4 = st.tabs(["🧽 Lavadero", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
 
@@ -213,7 +226,6 @@ def main():
                     c[4].markdown(f"<span class='txt-truncado'>{p['mod']}</span>", unsafe_allow_html=True)
                     c[5].write(p['ase'])
                     with c[6]:
-                        # --- LÓGICA BOTONES ORIGINAL ---
                         if not p['ini']:
                             if st.button("▶️", key=f"s{p['fila']}", type="primary"):
                                 hoja.update_cell(p['fila'], IDX_INI1+1, now_dt.strftime("%H:%M")); hoja.update_cell(p['fila'], IDX_EST+1, "LAVANDO"); st.rerun()
@@ -269,17 +281,53 @@ def main():
 
     with tab3:
         st.subheader("📅 Historial Mensual")
-        if historial_global:
-            df_h = pd.DataFrame(historial_global)
+        # Combinamos meses de lavadero y taller para el selector
+        meses_lav = [x['Mes'] for x in historial_global]
+        meses_tal = [x['Mes'] for x in historial_taller]
+        meses_disp = sorted(list(set(meses_lav + meses_tal)), reverse=True)
+
+        if meses_disp:
             col_sel, _ = st.columns([1, 4])
-            with col_sel: m_sel = st.selectbox("Seleccionar Mes:", sorted(df_h['Mes'].unique(), reverse=True))
-            df_m = df_h[df_h['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
-            fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
-            fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(fig_hist, use_container_width=True)
-            st.dataframe(df_m.sort_values('Fecha', ascending=False).assign(Fecha=lambda x: x['Fecha'].dt.strftime('%d/%m/%Y')), use_container_width=True, hide_index=True)
+            with col_sel: m_sel = st.selectbox("Seleccionar Mes:", meses_disp)
+            
+            # Gráfico Lavadero
+            df_h_lav = pd.DataFrame(historial_global)
+            if not df_h_lav.empty:
+                df_m = df_h_lav[df_h_lav['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
+                if not df_m.empty:
+                    fig_hist = go.Figure()
+                    fig_hist.add_trace(go.Bar(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Lavados'], name='Autos', marker_color='#00235d', yaxis='y'))
+                    fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
+                    fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
+                    st.plotly_chart(fig_hist, use_container_width=True)
+            
+            # --- NUEVA SECCIÓN DE INDICADORES (KPIs) ---
+            st.markdown("---")
+            st.subheader(f"🔧 Indicadores Taller - {m_sel}")
+            df_h_taller = pd.DataFrame(historial_taller)
+            
+            if not df_h_taller.empty:
+                df_mt = df_h_taller[df_h_taller['Mes'] == m_sel]
+                if not df_mt.empty:
+                    total_turnos = len(df_mt)
+                    vinieron = df_mt['Vino'].sum()
+                    ausentes = total_turnos - vinieron
+                    recuperados = df_mt['Rec'].sum()
+                    sobreturnos = len(df_mt[~df_mt['DMS']]) # Si NO es DMS, es sobreturno (13:00)
+                    servicios = df_mt['Serv'].sum()
+
+                    # Cálculos
+                    tasa_asistencia = (vinieron / total_turnos * 100) if total_turnos > 0 else 0
+                    tasa_recupero = (recuperados / ausentes * 100) if ausentes > 0 else 0
+                    mix_servicios = (servicios / vinieron * 100) if vinieron > 0 else 0
+
+                    k1, k2, k3, k4, k5 = st.columns(5)
+                    k1.metric("Asistencia", f"{int(tasa_asistencia)}%", f"{vinieron}/{total_turnos}")
+                    k2.metric("Tasa Recupero", f"{int(tasa_recupero)}%", f"{recuperados} de {ausentes}")
+                    k3.metric("Sobreturnos", sobreturnos, "Adicionales")
+                    k4.metric("Servicios", servicios)
+                    k5.metric("Mix Servicios", f"{int(mix_servicios)}%", "s/Ingresos")
+                else: st.info("No hay datos de taller para este mes.")
         else: st.warning("No hay datos históricos registrados.")
 
     with tab4:
@@ -316,6 +364,7 @@ def main():
             g1, g2 = st.columns(2)
             with g1: st.plotly_chart(px.pie(df_t, names='vino', title="Presentes vs Ausentes", color_discrete_sequence=['#2e7d32', '#d32f2f']), use_container_width=True)
             with g2: st.plotly_chart(px.pie(df_t, names='serv', title="Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
+        else: st.info("Sin datos de taller para esta fecha.")
 
 if __name__ == "__main__":
     main()
