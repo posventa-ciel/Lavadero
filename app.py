@@ -131,6 +131,7 @@ def main():
 
     with st.sidebar:
         st.image("logo.png", use_container_width=True)
+        
         st.markdown("### 🔍 Buscar Patente")
         busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
         st.markdown("---")
