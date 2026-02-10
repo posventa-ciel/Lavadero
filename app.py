@@ -8,8 +8,12 @@ import pytz
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Integral Lavadero y Taller", layout="wide")
+# --- 1. CONFIGURACIÓN DE PÁGINA (Con Logo en la pestaña) ---
+st.set_page_config(
+    page_title="Gestión Integral Lavadero y Taller", 
+    layout="wide",
+    page_icon="logo.png" # Aquí busca el logo para el ícono del navegador
+)
 
 # --- 2. ESTILOS CSS ---
 st.markdown("""
@@ -53,7 +57,6 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-# MODIFICADO: Ahora recibe fecha_base (fecha de ingreso del auto)
 def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
     val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
@@ -62,7 +65,7 @@ def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
-            base = fecha_base if fecha_base else hoy # Si por algo no hay fecha base, usa hoy
+            base = fecha_base if fecha_base else hoy 
             return tz.localize(datetime(base.year, base.month, base.day, h, m))
         except: pass
         
@@ -78,7 +81,7 @@ def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
 def formatear_fecha_corta(dt, now_dt):
     if dt.year == 2099: return "S/D"
     if dt.date() == now_dt.date(): return dt.strftime("%H:%M")
-    return dt.strftime("%d/%m %H:%M") # Si es de otro dia, muestra fecha y hora
+    return dt.strftime("%d/%m %H:%M")
 
 def generar_badge_alertas(prometido_dt, now_dt, estado_actual):
     texto = formatear_fecha_corta(prometido_dt, now_dt)
@@ -86,13 +89,10 @@ def generar_badge_alertas(prometido_dt, now_dt, estado_actual):
     if estado_actual == "REPASO": return f"<div class='badge badge-teal'>{texto}<br>REPASO</div>"
     if prometido_dt.year == 2099: return f"<div class='badge badge-gray'>{texto}</div>"
     
-    es_hoy = prometido_dt.date() <= now_dt.date() # Si es fecha pasada, entra aquí también
-    
+    es_hoy = prometido_dt.date() <= now_dt.date()
     diff = (prometido_dt - now_dt).total_seconds() / 60
     
-    # Si diff es negativo, significa que ya pasó la hora -> DEMORADO
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
-    
     if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
     
     if diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
@@ -130,6 +130,12 @@ def main():
     IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL, IDX_FECHA_FIN, IDX_RECUPERO = 8, 9, 10, 11, 12, 13, 14, 15
 
     with st.sidebar:
+        # --- LOGO ---
+        try:
+            st.image("logo.png", use_container_width=True)
+        except:
+            st.warning("Sube logo.png a GitHub")
+            
         st.markdown("### 🔍 Buscar Patente")
         busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
         st.markdown("---")
@@ -160,8 +166,7 @@ def main():
         es_de_fecha = (f_str in f_ingreso_raw) or (f_str_cero in f_ingreso_raw)
         tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
         
-        # --- PROCESAMIENTO FECHA INGRESO ---
-        # Primero obtenemos la fecha real de ingreso para usarla de base
+        # Fecha Ingreso base
         f_dt_obj = None
         try:
             f_dt_obj = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
@@ -169,14 +174,12 @@ def main():
             try: f_dt_obj = datetime.strptime(f_ingreso_raw, "%d/%m/%Y")
             except: pass
         
-        # Obtenemos string para display
         try:
             h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
             f_ing_display = f"{f_dt_obj.strftime('%d/%m')} {h_ing}" if f_dt_obj else f_ingreso_raw
         except: f_ing_display = f_ingreso_raw
 
-        # --- PROCESAMIENTO FECHA PROMETIDA (CORREGIDO) ---
-        # Pasamos f_dt_obj como 'fecha_base'. Si el asesor puso "17:00", usará la fecha de ingreso, no HOY.
+        # Fecha Prometida (usando base ingreso)
         dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar, fecha_base=f_dt_obj)
 
         item = {
@@ -197,7 +200,6 @@ def main():
                 if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                     finalizados_ver.append(item)
                 
-                # Historial Lavadero
                 if f_dt_obj:
                     t_n = calcular_tiempo_neto(item)
                     if t_n > 0: historial_global.append({"Fecha": f_dt_obj, "Mes": f_dt_obj.strftime("%Y-%m"), "Mins": t_n})
