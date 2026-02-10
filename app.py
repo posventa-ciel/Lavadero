@@ -53,14 +53,19 @@ def conectar_sheet():
         st.error(f"Error conectando: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
-def procesar_fecha_flexible(val, hoy, tz):
+# MODIFICADO: Ahora recibe fecha_base (fecha de ingreso del auto)
+def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
     val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
+    
+    # Si solo hay hora (ej: "17:00"), usamos la fecha de ingreso (fecha_base) en vez de HOY
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
-            return tz.localize(datetime(hoy.year, hoy.month, hoy.day, h, m))
+            base = fecha_base if fecha_base else hoy # Si por algo no hay fecha base, usa hoy
+            return tz.localize(datetime(base.year, base.month, base.day, h, m))
         except: pass
+        
     formatos = ["%d/%m/%Y %H:%M", "%d/%m/%y %H:%M", "%d/%m %H:%M", "%d/%m/%Y", "%d/%m"]
     for fmt in formatos:
         try:
@@ -73,18 +78,24 @@ def procesar_fecha_flexible(val, hoy, tz):
 def formatear_fecha_corta(dt, now_dt):
     if dt.year == 2099: return "S/D"
     if dt.date() == now_dt.date(): return dt.strftime("%H:%M")
-    return dt.strftime("%d/%m %H:%M")
+    return dt.strftime("%d/%m %H:%M") # Si es de otro dia, muestra fecha y hora
 
 def generar_badge_alertas(prometido_dt, now_dt, estado_actual):
     texto = formatear_fecha_corta(prometido_dt, now_dt)
     if estado_actual == "PAUSA": return f"<div class='badge badge-gray'>{texto}<br>PAUSADO</div>"
     if estado_actual == "REPASO": return f"<div class='badge badge-teal'>{texto}<br>REPASO</div>"
     if prometido_dt.year == 2099: return f"<div class='badge badge-gray'>{texto}</div>"
-    es_hoy = prometido_dt.date() <= now_dt.date()
-    if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
+    
+    es_hoy = prometido_dt.date() <= now_dt.date() # Si es fecha pasada, entra aquí también
+    
     diff = (prometido_dt - now_dt).total_seconds() / 60
+    
+    # Si diff es negativo, significa que ya pasó la hora -> DEMORADO
     if diff < 0: return f"<div class='badge badge-red'>{texto}<br>DEMORADO</div>"
-    elif diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
+    
+    if not es_hoy: return f"<div class='badge badge-blue'>{texto}<br>PRÓXIMO</div>"
+    
+    if diff <= 30: return f"<div class='badge badge-red'>{texto}<br>YA!</div>"
     elif diff <= 60: return f"<div class='badge badge-yellow'>{texto}<br>ATENCIÓN</div>"
     return f"<b>{texto}</b>"
 
@@ -126,16 +137,16 @@ def main():
         f_str, f_str_cero = fecha_sel.strftime("%-d/%-m/%Y"), fecha_sel.strftime("%d/%m/%Y")
 
     pendientes, finalizados_ver, turnos_eficiencia = [], [], []
-    historial_global = [] # Lavadero
-    historial_taller = [] # Taller (Nueva lista para indicadores)
+    historial_global = [] 
+    historial_taller = [] 
 
     for i, fila in enumerate(raw_data[1:], start=2):
         if len(fila) < 16: fila += [""] * (16 - len(fila))
         
         f_ingreso_raw = fila[IDX_FECHA].strip()
         hora_recep_raw = fila[IDX_ING_DMS].strip()
-        
-        # --- FILTRO MAESTRO (EL QUE FUNCIONA): Si no tiene ni fecha ni hora, afuera ---
+
+        # --- FILTRO MAESTRO ---
         if not f_ingreso_raw and not hora_recep_raw: continue
 
         dom_raw = fila[IDX_DOM].upper().strip()
@@ -148,15 +159,25 @@ def main():
         f_fin_celda = fila[IDX_FECHA_FIN].strip()
         es_de_fecha = (f_str in f_ingreso_raw) or (f_str_cero in f_ingreso_raw)
         tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
-        dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar)
-
+        
+        # --- PROCESAMIENTO FECHA INGRESO ---
+        # Primero obtenemos la fecha real de ingreso para usarla de base
+        f_dt_obj = None
         try:
-            f_ing_dt = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
-            h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
-            f_ing_display = f"{f_ing_dt.strftime('%d/%m')} {h_ing}"
+            f_dt_obj = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
         except: 
-            f_ing_display = f_ingreso_raw
-            f_ing_dt = None # Si falla, es None
+            try: f_dt_obj = datetime.strptime(f_ingreso_raw, "%d/%m/%Y")
+            except: pass
+        
+        # Obtenemos string para display
+        try:
+            h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
+            f_ing_display = f"{f_dt_obj.strftime('%d/%m')} {h_ing}" if f_dt_obj else f_ingreso_raw
+        except: f_ing_display = f_ingreso_raw
+
+        # --- PROCESAMIENTO FECHA PROMETIDA (CORREGIDO) ---
+        # Pasamos f_dt_obj como 'fecha_base'. Si el asesor puso "17:00", usará la fecha de ingreso, no HOY.
+        dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar, fecha_base=f_dt_obj)
 
         item = {
             "fila": i, "dom": display_dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -177,11 +198,11 @@ def main():
                     finalizados_ver.append(item)
                 
                 # Historial Lavadero
-                if f_ing_dt:
+                if f_dt_obj:
                     t_n = calcular_tiempo_neto(item)
-                    if t_n > 0: historial_global.append({"Fecha": f_ing_dt, "Mes": f_ing_dt.strftime("%Y-%m"), "Mins": t_n})
+                    if t_n > 0: historial_global.append({"Fecha": f_dt_obj, "Mes": f_dt_obj.strftime("%Y-%m"), "Mins": t_n})
 
-        # --- 2. TALLER (Eficiencia + Historial) ---
+        # --- 2. TALLER ---
         if hora_recep_raw:
             vino_real = "NO VINO" not in pro_raw
             es_dms = (hora_recep_raw != "13:00")
@@ -190,7 +211,6 @@ def main():
             es_servicio = any(x in txt_t for x in palabras_serv)
             es_recuperado = (fila[IDX_RECUPERO].upper() == "SI")
             
-            # Para Pestaña 4 (Turnos del Día)
             if es_de_fecha:
                 turnos_eficiencia.append({
                     "fila": i, "dom": display_dom, "cli": fila[IDX_CLI], "mod": fila[IDX_MOD], 
@@ -198,14 +218,10 @@ def main():
                     "serv": es_servicio, "rec": es_recuperado
                 })
 
-            # Para Pestaña 3 (Historial Acumulado) - Solo si tenemos fecha válida
-            if f_ing_dt:
+            if f_dt_obj:
                 historial_taller.append({
-                    "Mes": f_ing_dt.strftime("%Y-%m"),
-                    "DMS": es_dms,
-                    "Vino": vino_real,
-                    "Serv": es_servicio,
-                    "Rec": es_recuperado
+                    "Mes": f_dt_obj.strftime("%Y-%m"),
+                    "DMS": es_dms, "Vino": vino_real, "Serv": es_servicio, "Rec": es_recuperado
                 })
 
     tab1, tab2, tab3, tab4 = st.tabs(["🧽 Lavadero", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
@@ -281,7 +297,6 @@ def main():
 
     with tab3:
         st.subheader("📅 Historial Mensual")
-        # Combinamos meses de lavadero y taller para el selector
         meses_lav = [x['Mes'] for x in historial_global]
         meses_tal = [x['Mes'] for x in historial_taller]
         meses_disp = sorted(list(set(meses_lav + meses_tal)), reverse=True)
@@ -290,7 +305,6 @@ def main():
             col_sel, _ = st.columns([1, 4])
             with col_sel: m_sel = st.selectbox("Seleccionar Mes:", meses_disp)
             
-            # Gráfico Lavadero
             df_h_lav = pd.DataFrame(historial_global)
             if not df_h_lav.empty:
                 df_m = df_h_lav[df_h_lav['Mes'] == m_sel].groupby('Fecha').agg(Lavados=('Fecha','count'), Promedio=('Mins','mean')).reset_index()
@@ -301,7 +315,6 @@ def main():
                     fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
                     st.plotly_chart(fig_hist, use_container_width=True)
             
-            # --- NUEVA SECCIÓN DE INDICADORES (KPIs) ---
             st.markdown("---")
             st.subheader(f"🔧 Indicadores Taller - {m_sel}")
             df_h_taller = pd.DataFrame(historial_taller)
@@ -313,10 +326,9 @@ def main():
                     vinieron = df_mt['Vino'].sum()
                     ausentes = total_turnos - vinieron
                     recuperados = df_mt['Rec'].sum()
-                    sobreturnos = len(df_mt[~df_mt['DMS']]) # Si NO es DMS, es sobreturno (13:00)
+                    sobreturnos = len(df_mt[~df_mt['DMS']])
                     servicios = df_mt['Serv'].sum()
 
-                    # Cálculos
                     tasa_asistencia = (vinieron / total_turnos * 100) if total_turnos > 0 else 0
                     tasa_recupero = (recuperados / ausentes * 100) if ausentes > 0 else 0
                     mix_servicios = (servicios / vinieron * 100) if vinieron > 0 else 0
