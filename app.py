@@ -130,6 +130,7 @@ def main():
     IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL, IDX_FECHA_FIN, IDX_RECUPERO = 8, 9, 10, 11, 12, 13, 14, 15
 
     with st.sidebar:
+        st.image("logo.png", use_container_width=True)
         st.markdown("### 🔍 Buscar Patente")
         busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
         st.markdown("---")
