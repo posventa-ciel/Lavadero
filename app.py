@@ -8,11 +8,11 @@ import pytz
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURACIÓN DE PÁGINA (Con Logo en la pestaña) ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="Gestión Integral Lavadero y Taller", 
     layout="wide",
-    page_icon="logo.png" # Aquí busca el logo para el ícono del navegador
+    page_icon="logo.png"
 )
 
 # --- 2. ESTILOS CSS ---
@@ -61,7 +61,6 @@ def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
     val = str(val).strip().replace("-", "/")
     if not val: return tz.localize(datetime(2099, 12, 31))
     
-    # Si solo hay hora (ej: "17:00"), usamos la fecha de ingreso (fecha_base) en vez de HOY
     if ":" in val and len(val) <= 5:
         try:
             h, m = map(int, val.split(':'))
@@ -130,11 +129,8 @@ def main():
     IDX_INI1, IDX_FIN1, IDX_INI2, IDX_FIN2, IDX_EST, IDX_CTRL, IDX_FECHA_FIN, IDX_RECUPERO = 8, 9, 10, 11, 12, 13, 14, 15
 
     with st.sidebar:
-        # --- LOGO ---
-        try:
-            st.image("logo.png", use_container_width=True)
-        except:
-            st.warning("Sube logo.png a GitHub")
+        try: st.image("logo.png", use_container_width=True)
+        except: st.warning("Sube logo.png a GitHub")
             
         st.markdown("### 🔍 Buscar Patente")
         busqueda = st.text_input("", placeholder="Ej: AB123CD", label_visibility="collapsed").upper()
@@ -166,21 +162,20 @@ def main():
         es_de_fecha = (f_str in f_ingreso_raw) or (f_str_cero in f_ingreso_raw)
         tiene_fin = fila[IDX_FIN1].strip() != "" or fila[IDX_FIN2].strip() != ""
         
-        # Fecha Ingreso base
-        f_dt_obj = None
+        # Fecha Base Ingreso
+        f_dt_ingreso = None
         try:
-            f_dt_obj = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
+            f_dt_ingreso = datetime.strptime(f_ingreso_raw.split()[0], "%d/%m/%Y")
         except: 
-            try: f_dt_obj = datetime.strptime(f_ingreso_raw, "%d/%m/%Y")
+            try: f_dt_ingreso = datetime.strptime(f_ingreso_raw, "%d/%m/%Y")
             except: pass
         
         try:
             h_ing = f_ingreso_raw.split()[1] if len(f_ingreso_raw.split()) > 1 else ""
-            f_ing_display = f"{f_dt_obj.strftime('%d/%m')} {h_ing}" if f_dt_obj else f_ingreso_raw
+            f_ing_display = f"{f_dt_ingreso.strftime('%d/%m')} {h_ing}" if f_dt_ingreso else f_ingreso_raw
         except: f_ing_display = f_ingreso_raw
 
-        # Fecha Prometida (usando base ingreso)
-        dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar, fecha_base=f_dt_obj)
+        dt_prometido = procesar_fecha_flexible(fila[IDX_PRO], hoy_date, tz_ar, fecha_base=f_dt_ingreso)
 
         item = {
             "fila": i, "dom": display_dom, "mod": fila[IDX_MOD], "cli": fila[IDX_CLI], "ase": limpiar_asesor(fila[IDX_ASE]),
@@ -200,9 +195,20 @@ def main():
                 if es_de_fecha or (fecha_sel == hoy_date and f_fin_celda == hoy_str):
                     finalizados_ver.append(item)
                 
-                if f_dt_obj:
-                    t_n = calcular_tiempo_neto(item)
-                    if t_n > 0: historial_global.append({"Fecha": f_dt_obj, "Mes": f_dt_obj.strftime("%Y-%m"), "Mins": t_n})
+                # --- CAMBIO IMPORTANTE HISTORIAL: Usar Fecha FIN, no Inicio ---
+                if f_fin_celda: # Solo si tiene fecha de finalización
+                    try:
+                        f_fin_dt = datetime.strptime(f_fin_celda, "%d/%m/%Y")
+                        t_n = calcular_tiempo_neto(item)
+                        if t_n > 0: 
+                            historial_global.append({
+                                "Fecha": f_fin_dt, 
+                                "Mes": f_fin_dt.strftime("%Y-%m"), 
+                                "Mins": t_n,
+                                "Patente": display_dom,
+                                "Asesor": item['ase']
+                            })
+                    except: pass
 
         # --- 2. TALLER ---
         if hora_recep_raw:
@@ -220,9 +226,9 @@ def main():
                     "serv": es_servicio, "rec": es_recuperado
                 })
 
-            if f_dt_obj:
+            if f_dt_ingreso:
                 historial_taller.append({
-                    "Mes": f_dt_obj.strftime("%Y-%m"),
+                    "Mes": f_dt_ingreso.strftime("%Y-%m"),
                     "DMS": es_dms, "Vino": vino_real, "Serv": es_servicio, "Rec": es_recuperado
                 })
 
@@ -316,6 +322,13 @@ def main():
                     fig_hist.add_trace(go.Scatter(x=df_m['Fecha'].dt.strftime('%d/%m'), y=df_m['Promedio'], name='Promedio', line=dict(color='#fbc02d', width=4), yaxis='y2'))
                     fig_hist.update_layout(yaxis=dict(title="Autos"), yaxis2=dict(title="Minutos", overlaying="y", side="right"), legend=dict(orientation="h", y=1.1))
                     st.plotly_chart(fig_hist, use_container_width=True)
+            
+            st.markdown("### 🕵️ Detalle de Operaciones")
+            if not df_h_lav.empty:
+                 df_detail = df_h_lav[df_h_lav['Mes'] == m_sel].copy()
+                 if not df_detail.empty:
+                     df_detail['Fecha'] = df_detail['Fecha'].dt.strftime('%d/%m/%Y')
+                     st.dataframe(df_detail[['Fecha', 'Patente', 'Asesor', 'Mins']], use_container_width=True, hide_index=True)
             
             st.markdown("---")
             st.subheader(f"🔧 Indicadores Taller - {m_sel}")
