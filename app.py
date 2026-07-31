@@ -428,76 +428,151 @@ def main():
         else: st.info("Sin datos de taller para esta fecha.")
 
     with tab5:
-        st.subheader("Control de Costos y Rendimiento de Insumos")
+        st.subheader("💰 Control de Costos e Insumos")
         
+        # 1. Cargar datos de la hoja de gastos
+        hoja_gastos = conectar_sheet_gastos()
+        if hoja_gastos:
+            raw_gastos = hoja_gastos.get_all_values()
+            df_gastos = pd.DataFrame(raw_gastos[1:], columns=raw_gastos[0]) if len(raw_gastos) > 1 else pd.DataFrame(columns=["Fecha", "Insumo", "Cantidad", "Unidad", "Costo Total", "Responsable"])
+        else:
+            df_gastos = pd.DataFrame(columns=["Fecha", "Insumo", "Cantidad", "Unidad", "Costo Total", "Responsable"])
+
         col_form, col_dash = st.columns([1, 2.5])
+        lista_insumos = [
+            "Desengrasante", "Shampoo", "Caucho", "Silicona", "Antigrasa", 
+            "Guantes", "Rejilla de Microfibra", "Manopla rejilla", 
+            "Cepillo", "Secador", "Perfume aerosol", "Esponja p/Caucho"
+        ]
         
         # --- SECTOR IZQUIERDO: FORMULARIO DE CARGA ---
         with col_form:
-            st.markdown("### 📥 Cargar Gasto")
+            st.markdown("### 📥 Nueva Reposición")
             with st.form(key="form_gastos", clear_on_submit=True):
-                fecha_gasto = st.date_input("Fecha", hoy_date)
-                insumo = st.selectbox("Insumo / Producto", [
-                    "Shampoo", "Desengrasante", "Silicona Interior", 
-                    "Revividor de Neumáticos", "Cera", "Paños/Microfibras", "Otros"
-                ])
+                fecha_gasto = st.date_input("Fecha de reposición", hoy_date)
+                insumo = st.selectbox("Insumo / Producto", lista_insumos)
                 
                 c_cant, c_uni = st.columns([2, 1])
                 cantidad = c_cant.number_input("Cantidad", min_value=0.1, step=0.5)
-                unidad = c_uni.selectbox("Unidad", ["Lts", "Unid."])
+                # Seleccionar Unidad sugerida según el producto
+                unid_sugerida = 1 if insumo in ["Guantes", "Rejilla de Microfibra", "Manopla rejilla", "Cepillo", "Secador", "Esponja p/Caucho"] else 0
+                unidad = c_uni.selectbox("Unidad", ["Lts", "Unid.", "Ml"], index=unid_sugerida)
                 
                 costo_total = st.number_input("Costo Total ($)", min_value=0.0, step=1000.0)
-                responsable = st.text_input("Responsable (Quién retira/compra)")
+                responsable = st.text_input("Responsable (Quién recibe)")
                 
                 submit_btn = st.form_submit_button("Registrar Gasto", type="primary", use_container_width=True)
                 
                 if submit_btn:
-                    # ACÁ IRÁ LA LÓGICA DE GSPREAD PARA GUARDAR EN LA HOJA
-                    # ej: hoja_gastos.append_row([fecha_gasto.strftime("%d/%m/%Y"), insumo, cantidad, unidad, costo_total, responsable])
-                    st.success(f"✅ {insumo} registrado correctamente.")
+                    if hoja_gastos:
+                        hoja_gastos.append_row([
+                            fecha_gasto.strftime("%d/%m/%Y"), 
+                            insumo, str(cantidad), unidad, str(costo_total), responsable
+                        ])
+                        st.success(f"✅ {insumo} registrado. Recargá la página para actualizar.")
+                    else:
+                        st.error("No hay conexión con la planilla de gastos.")
 
-        # --- SECTOR DERECHO: DASHBOARD E INDICADORES ---
+        # --- SECTOR DERECHO: DASHBOARD DE RENDIMIENTOS ---
         with col_dash:
-            st.markdown("### 📊 Indicadores del Mes Actual")
-            
-            # (Estos son datos simulados hasta conectar tu Google Sheet de gastos)
-            # Para el cálculo real, usaremos len([x for x in historial_global if x['Mes'] == mes_actual])
-            autos_lavados_mes = 145 
-            gasto_total_mes = 85000 
-            lts_desengrasante = 45 
-            
-            # Tarjetas de KPI
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("Gasto Total Mes", f"${gasto_total_mes:,.0f}")
-            k2.metric("Costo Promedio x Auto", f"${(gasto_total_mes/autos_lavados_mes):,.2f}")
-            k3.metric("Rend. Desengrasante", f"{(lts_desengrasante/autos_lavados_mes):,.2f} Lts/Auto")
-            k4.metric("Autos Lavados", autos_lavados_mes)
-            
-            st.markdown("---")
-            
-            # Gráficos de ejemplo usando Plotly
-            cg1, cg2 = st.columns(2)
-            
-            # Simulamos un DataFrame de gastos para los gráficos
-            df_gastos_mock = pd.DataFrame({
-                "Insumo": ["Shampoo", "Desengrasante", "Silicona Interior", "Paños/Microfibras"],
-                "Costo": [25000, 40000, 15000, 5000],
-                "Cantidad": [20, 45, 10, 5]
-            })
-            
-            with cg1:
-                fig_pie = px.pie(df_gastos_mock, values='Costo', names='Insumo', 
-                                 title='Distribución de Gastos ($)', hole=0.4,
-                                 color_discrete_sequence=['#00235d', '#fbc02d', '#17a2b8', '#6c757d'])
-                fig_pie.update_layout(margin=dict(t=30, b=0, l=0, r=0))
-                st.plotly_chart(fig_pie, use_container_width=True)
+            if not df_gastos.empty:
+                # Limpiar y preparar tipos de datos
+                df_gastos['Fecha'] = pd.to_datetime(df_gastos['Fecha'], format='%d/%m/%Y', errors='coerce')
+                df_gastos['Cantidad'] = df_gastos['Cantidad'].astype(str).str.replace(',', '.').astype(float)
+                df_gastos['Costo Total'] = df_gastos['Costo Total'].astype(str).str.replace(',', '.').astype(float)
                 
-            with cg2:
-                fig_bar = px.bar(df_gastos_mock, x='Insumo', y='Cantidad', 
-                                 title='Consumo Físico (Lts/Unidades)', text='Cantidad',
-                                 color_discrete_sequence=['#00235d'])
-                fig_bar.update_layout(margin=dict(t=30, b=0, l=0, r=0))
-                st.plotly_chart(fig_bar, use_container_width=True)
+                # Convertir historial de autos a DataFrame para cruzar
+                df_autos = pd.DataFrame(historial_global) 
+                
+                # Métricas Generales del Mes Actual
+                mes_actual_str = now_dt.strftime("%Y-%m")
+                gastos_mes = df_gastos[df_gastos['Fecha'].dt.strftime('%Y-%m') == mes_actual_str]
+                costo_total_mes = gastos_mes['Costo Total'].sum()
+                
+                # Autos lavados en el mes
+                if not df_autos.empty and 'Mes' in df_autos.columns:
+                    autos_mes = len(df_autos[df_autos['Mes'] == mes_actual_str])
+                else:
+                    autos_mes = 0
+                    
+                costo_x_auto = (costo_total_mes / autos_mes) if autos_mes > 0 else 0
+
+                st.markdown(f"### 📊 Resumen Mensual - {mes_actual_str}")
+                k1, k2, k3 = st.columns(3)
+                k1.metric("Gasto Total Mes", f"${costo_total_mes:,.0f}")
+                k2.metric("Autos Lavados", autos_mes)
+                k3.metric("Costo Promedio x Auto", f"${costo_x_auto:,.2f}")
+                
+                st.markdown("---")
+                
+                # --- LÓGICA DE RENDIMIENTO (Reposición a Reposición) ---
+                st.markdown("### 🔍 Análisis de Rendimiento y Previsión")
+                insumo_analisis = st.selectbox("Seleccionar insumo para analizar rendimiento:", lista_insumos)
+                
+                df_insumo = df_gastos[df_gastos['Insumo'] == insumo_analisis].sort_values('Fecha')
+                
+                if len(df_insumo) >= 2 and not df_autos.empty:
+                    # Hubo al menos 2 reposiciones, podemos medir el último ciclo completado
+                    fecha_inicio_ciclo = df_insumo.iloc[-2]['Fecha']
+                    fecha_fin_ciclo = df_insumo.iloc[-1]['Fecha'] # Día de la nueva reposición
+                    cantidad_usada = df_insumo.iloc[-2]['Cantidad']
+                    unidad_ins = df_insumo.iloc[-2]['Unidad']
+                    stock_actual = df_insumo.iloc[-1]['Cantidad']
+                    
+                    # Autos lavados durante ese ciclo
+                    autos_ciclo = len(df_autos[(df_autos['Fecha'] >= fecha_inicio_ciclo) & (df_autos['Fecha'] < fecha_fin_ciclo)])
+                    
+                    if autos_ciclo > 0:
+                        rendimiento_x_auto = cantidad_usada / autos_ciclo
+                        
+                        # Previsión: Calculamos ritmo diario últimos 30 días
+                        hace_30_dias = (now_dt - timedelta(days=30)).replace(tzinfo=None)
+                        autos_ultimos_30 = len(df_autos[df_autos['Fecha'] >= hace_30_dias])
+                        promedio_autos_dia = autos_ultimos_30 / 30 if autos_ultimos_30 > 0 else 1
+                        
+                        # ¿Cuánto durará el stock actual?
+                        consumo_diario_est = rendimiento_x_auto * promedio_autos_dia
+                        dias_duracion = stock_actual / consumo_diario_est if consumo_diario_est > 0 else 0
+                        fecha_prevision = fecha_fin_ciclo + timedelta(days=dias_duracion)
+                        
+                        r1, r2, r3, r4 = st.columns(4)
+                        r1.metric("Rendimiento del ciclo", f"{rendimiento_x_auto:,.3f} {unidad_ins}/auto")
+                        r2.metric("Autos en el ciclo", f"{autos_ciclo} autos")
+                        r3.metric("Stock Actual", f"{stock_actual} {unidad_ins}")
+                        
+                        fecha_prev_str = fecha_prevision.strftime("%d/%m")
+                        estado_stock = "NORMAL"
+                        color_stock = "badge-ok"
+                        if fecha_prevision.date() <= (now_dt.date() + timedelta(days=3)):
+                            estado_stock = "CRÍTICO"
+                            color_stock = "badge-red"
+                        
+                        r4.markdown(f"<div style='text-align:center'><small>Próxima Reposición:</small><br><span class='badge {color_stock}' style='font-size:14px; padding:5px 10px;'>{fecha_prev_str} ({estado_stock})</span></div>", unsafe_allow_html=True)
+                    else:
+                        st.info("No hay autos registrados en el período de este ciclo para calcular rendimiento.")
+                elif len(df_insumo) == 1:
+                    st.info(f"Se necesita cargar una segunda reposición de **{insumo_analisis}** cuando se acabe para calcular su rendimiento exacto.")
+                else:
+                    st.warning(f"Aún no hay compras registradas de **{insumo_analisis}**.")
+                    
+                # Gráficos
+                if not gastos_mes.empty:
+                    cg1, cg2 = st.columns(2)
+                    with cg1:
+                        fig_pie = px.pie(gastos_mes, values='Costo Total', names='Insumo', 
+                                         title='Distribución de Gastos (Mes Actual)')
+                        fig_pie.update_layout(margin=dict(t=30, b=0, l=0, r=0))
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    with cg2:
+                        # Consumo físico histórico general
+                        fig_bar = px.bar(df_gastos.groupby(['Insumo', 'Unidad'])['Cantidad'].sum().reset_index(), 
+                                         x='Insumo', y='Cantidad', text='Unidad',
+                                         title='Consumo Físico Total Histórico',
+                                         color_discrete_sequence=['#00235d'])
+                        fig_bar.update_layout(margin=dict(t=30, b=0, l=0, r=0))
+                        st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("La planilla de gastos está vacía. Registrá el primer gasto en el panel izquierdo.")
 
 if __name__ == "__main__":
     main()
