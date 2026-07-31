@@ -55,6 +55,17 @@ def conectar_sheet():
         return client.open_by_url(url).worksheet("PLAN GENERAL")
     except Exception as e:
         st.error(f"Error conectando: {e}"); return None
+        
+def conectar_sheet_gastos():
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        key_dict = json.loads(st.secrets["service_account"])
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        client = gspread.authorize(creds)
+        url = "https://docs.google.com/spreadsheets/d/1zw3qrKmdK_gmGL8k_nDyC2ugWb_hMINDxNvqzE2Japo/edit"
+        return client.open_by_url(url).worksheet("GASTOS_LAVADERO")
+    except Exception as e:
+        st.error(f"Error conectando gastos: {e}"); return None
 
 # --- 4. FUNCIONES AUXILIARES ---
 def procesar_fecha_flexible(val, hoy, tz, fecha_base=None):
