@@ -484,7 +484,7 @@ def main():
             with cg2:
                 fig_bar = px.bar(df_gastos_mock, x='Insumo', y='Cantidad', 
                                  title='Consumo Físico (Lts/Unidades)', text='Cantidad',
-                                 marker_color='#00235d')
+                                 color_discrete_sequence=['#00235d'])
                 fig_bar.update_layout(margin=dict(t=30, b=0, l=0, r=0))
                 st.plotly_chart(fig_bar, use_container_width=True)
 
