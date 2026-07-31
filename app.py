@@ -548,6 +548,68 @@ def main():
                             color_stock = "badge-red"
                         
                         r4.markdown(f"<div style='text-align:center'><small>Próxima Reposición:</small><br><span class='badge {color_stock}' style='font-size:14px; padding:5px 10px;'>{fecha_prev_str} ({estado_stock})</span></div>", unsafe_allow_html=True)
+
+                        # --- NUEVO: EVOLUCIÓN HISTÓRICA DEL INSUMO ---
+                        st.markdown("---")
+                        st.markdown(f"#### 📈 Evolución Histórica: {insumo_analisis}")
+                        
+                        historial_rend = []
+                        # Recorremos todos los ciclos desde el primero hasta el actual
+                        for i in range(len(df_insumo) - 1):
+                            f_ini_h = df_insumo.iloc[i]['Fecha']
+                            f_fin_h = df_insumo.iloc[i+1]['Fecha']
+                            cant_h = df_insumo.iloc[i]['Cantidad']
+                            costo_h = df_insumo.iloc[i]['Costo Total']
+                            
+                            # Autos en este ciclo específico
+                            autos_h = len(df_autos[(df_autos['Fecha'] >= f_ini_h) & (df_autos['Fecha'] < f_fin_h)])
+                            
+                            if autos_h > 0:
+                                historial_rend.append({
+                                    "Ciclo": f"{f_ini_h.strftime('%d/%m')} al {f_fin_h.strftime('%d/%m')}",
+                                    "Rendimiento": cant_h / autos_h,
+                                    "Costo x Auto": costo_h / autos_h,
+                                    "Autos": autos_h
+                                })
+                        
+                        if historial_rend:
+                            df_hist = pd.DataFrame(historial_rend)
+                            
+                            # Gráfico de doble eje: Físico vs Económico
+                            fig_evol = go.Figure()
+                            
+                            # Barras: Costo en pesos por auto (Eje Y derecho)
+                            fig_evol.add_trace(go.Bar(
+                                x=df_hist['Ciclo'], y=df_hist['Costo x Auto'], 
+                                name='Costo x Auto ($)', marker_color='#fbc02d', opacity=0.6, yaxis='y2'
+                            ))
+                            
+                            # Línea: Consumo físico por auto (Eje Y principal)
+                            fig_evol.add_trace(go.Scatter(
+                                x=df_hist['Ciclo'], y=df_hist['Rendimiento'], 
+                                mode='lines+markers+text', name=f'Consumo ({unidad_ins}/auto)',
+                                line=dict(color='#00235d', width=4),
+                                marker=dict(size=8),
+                                text=df_hist['Rendimiento'].apply(lambda x: f"{x:.2f}"),
+                                textposition="top center"
+                            ))
+                            
+                            fig_evol.update_layout(
+                                margin=dict(t=30, b=0, l=0, r=0),
+                                yaxis=dict(title=f"{unidad_ins} / Auto", side="left"),
+                                yaxis2=dict(title="$ / Auto", overlaying="y", side="right", showgrid=False),
+                                legend=dict(orientation="h", y=1.1, x=0)
+                            )
+                            st.plotly_chart(fig_evol, use_container_width=True)
+                            
+                            # Tablita resumen debajo del gráfico
+                            st.dataframe(
+                                df_hist.style.format({
+                                    "Rendimiento": "{:.3f}", 
+                                    "Costo x Auto": "${:.2f}"
+                                }), 
+                                use_container_width=True, hide_index=True
+                            )
                     else:
                         st.info("No hay autos registrados en el período de este ciclo para calcular rendimiento.")
                 elif len(df_insumo) == 1:
