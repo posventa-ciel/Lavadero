@@ -232,7 +232,9 @@ def main():
                     "DMS": es_dms, "Vino": vino_real, "Serv": es_servicio, "Rec": es_recuperado
                 })
 
-    tab1, tab2, tab3, tab4 = st.tabs(["🧽 Lavadero", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🧽 Lavadero", "📊 Métricas Hoy", "📅 Historial", "📈 Eficiencia Turnos", "💰 Costos e Insumos"
+])
 
     with tab1:
         st.subheader(f"Pendientes ({len(pendientes)})")
