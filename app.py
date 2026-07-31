@@ -416,5 +416,77 @@ def main():
             with g2: st.plotly_chart(px.pie(df_t, names='serv', title="Servicios vs Otros", color_discrete_sequence=['#00235d', '#fbc02d']), use_container_width=True)
         else: st.info("Sin datos de taller para esta fecha.")
 
+    with tab5:
+        st.subheader("Control de Costos y Rendimiento de Insumos")
+        
+        col_form, col_dash = st.columns([1, 2.5])
+        
+        # --- SECTOR IZQUIERDO: FORMULARIO DE CARGA ---
+        with col_form:
+            st.markdown("### 📥 Cargar Gasto")
+            with st.form(key="form_gastos", clear_on_submit=True):
+                fecha_gasto = st.date_input("Fecha", hoy_date)
+                insumo = st.selectbox("Insumo / Producto", [
+                    "Shampoo", "Desengrasante", "Silicona Interior", 
+                    "Revividor de Neumáticos", "Cera", "Paños/Microfibras", "Otros"
+                ])
+                
+                c_cant, c_uni = st.columns([2, 1])
+                cantidad = c_cant.number_input("Cantidad", min_value=0.1, step=0.5)
+                unidad = c_uni.selectbox("Unidad", ["Lts", "Unid."])
+                
+                costo_total = st.number_input("Costo Total ($)", min_value=0.0, step=1000.0)
+                responsable = st.text_input("Responsable (Quién retira/compra)")
+                
+                submit_btn = st.form_submit_button("Registrar Gasto", type="primary", use_container_width=True)
+                
+                if submit_btn:
+                    # ACÁ IRÁ LA LÓGICA DE GSPREAD PARA GUARDAR EN LA HOJA
+                    # ej: hoja_gastos.append_row([fecha_gasto.strftime("%d/%m/%Y"), insumo, cantidad, unidad, costo_total, responsable])
+                    st.success(f"✅ {insumo} registrado correctamente.")
+
+        # --- SECTOR DERECHO: DASHBOARD E INDICADORES ---
+        with col_dash:
+            st.markdown("### 📊 Indicadores del Mes Actual")
+            
+            # (Estos son datos simulados hasta conectar tu Google Sheet de gastos)
+            # Para el cálculo real, usaremos len([x for x in historial_global if x['Mes'] == mes_actual])
+            autos_lavados_mes = 145 
+            gasto_total_mes = 85000 
+            lts_desengrasante = 45 
+            
+            # Tarjetas de KPI
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Gasto Total Mes", f"${gasto_total_mes:,.0f}")
+            k2.metric("Costo Promedio x Auto", f"${(gasto_total_mes/autos_lavados_mes):,.2f}")
+            k3.metric("Rend. Desengrasante", f"{(lts_desengrasante/autos_lavados_mes):,.2f} Lts/Auto")
+            k4.metric("Autos Lavados", autos_lavados_mes)
+            
+            st.markdown("---")
+            
+            # Gráficos de ejemplo usando Plotly
+            cg1, cg2 = st.columns(2)
+            
+            # Simulamos un DataFrame de gastos para los gráficos
+            df_gastos_mock = pd.DataFrame({
+                "Insumo": ["Shampoo", "Desengrasante", "Silicona Interior", "Paños/Microfibras"],
+                "Costo": [25000, 40000, 15000, 5000],
+                "Cantidad": [20, 45, 10, 5]
+            })
+            
+            with cg1:
+                fig_pie = px.pie(df_gastos_mock, values='Costo', names='Insumo', 
+                                 title='Distribución de Gastos ($)', hole=0.4,
+                                 color_discrete_sequence=['#00235d', '#fbc02d', '#17a2b8', '#6c757d'])
+                fig_pie.update_layout(margin=dict(t=30, b=0, l=0, r=0))
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+            with cg2:
+                fig_bar = px.bar(df_gastos_mock, x='Insumo', y='Cantidad', 
+                                 title='Consumo Físico (Lts/Unidades)', text='Cantidad',
+                                 marker_color='#00235d')
+                fig_bar.update_layout(margin=dict(t=30, b=0, l=0, r=0))
+                st.plotly_chart(fig_bar, use_container_width=True)
+
 if __name__ == "__main__":
     main()
