@@ -505,7 +505,7 @@ def main():
                     
                 costo_x_auto = (costo_total_mes / autos_mes) if autos_mes > 0 else 0
 
-                st.markdown(f"### 📊 Resumen Mensual - {mes_actual_str}")
+                st.markdown(f"### 📊 Resumen Mensual - {mes_sel_gastos}")
                 k1, k2, k3 = st.columns(3)
                 k1.metric("Gasto Total Mes", f"${costo_total_mes:,.0f}")
                 k2.metric("Autos Lavados", autos_mes)
