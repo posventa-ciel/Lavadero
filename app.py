@@ -558,22 +558,7 @@ def main():
 
                 st.markdown("---")
                 
-                # --- 3. GRÁFICOS Y EVOLUCIÓN HISTÓRICA ---
-                st.markdown("### 🥧 Distribución de Gastos")
-                
-                if not gastos_mes.empty:
-                    # Usamos columnas solo para achicar un poco el tamaño de la torta y que no ocupe toda la pantalla
-                    col_torta, _ = st.columns([1, 1])
-                    with col_torta:
-                        fig_pie = px.pie(gastos_mes, values='Costo Total', names='Insumo', hole=0.4)
-                        fig_pie.update_layout(margin=dict(t=10, b=0, l=0, r=0))
-                        st.plotly_chart(fig_pie, use_container_width=True)
-                else:
-                    st.write("Sin datos en el mes para el gráfico.")
-                    
-                st.markdown("---")
-                
-                # --- 4. ANÁLISIS DETALLADO DEL INSUMO ---
+                # --- 3. ANÁLISIS DETALLADO DEL INSUMO ---
                 st.markdown("### 🔍 Análisis Detallado por Insumo")
                 insumo_analisis = st.selectbox("Ver indicadores y evolución histórica de:", insumos_con_compras)
                 
@@ -642,6 +627,21 @@ def main():
                     st.info("Se necesitan al menos 2 reposiciones cargadas para mostrar los indicadores de este insumo.")
             else:
                 st.info("La planilla de gastos está vacía. Registrá el primer gasto en el panel izquierdo.")
+
+        # --- AÑADIMOS LA TORTA EN LA COLUMNA IZQUIERDA (DEBAJO DEL FORMULARIO) ---
+        if not df_gastos.empty:
+            with col_form:
+                st.markdown("---")
+                st.markdown(f"### 🥧 Gastos de {mes_sel_gastos}")
+                if not gastos_mes.empty:
+                    fig_pie = px.pie(gastos_mes, values='Costo Total', names='Insumo', hole=0.4)
+                    fig_pie.update_layout(
+                        margin=dict(t=10, b=0, l=0, r=0),
+                        legend=dict(orientation="h", y=-0.3, x=0) # Leyenda abajo para que entre bien en la columna
+                    )
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                else:
+                    st.info("Sin datos para graficar en este mes.")
 
 if __name__ == "__main__":
     main()
