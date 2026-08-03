@@ -571,33 +571,58 @@ def main():
                         st.write("Sin datos en el mes para el gráfico.")
                         
                 with cg2:
-                    insumo_analisis = st.selectbox("Ver evolución histórica detallada:", insumos_con_compras)
+                    st.markdown("### 🔍 Análisis Detallado del Insumo")
+                    insumo_analisis = st.selectbox("Ver indicadores y evolución histórica de:", insumos_con_compras)
+                    
                     df_insumo = df_gastos[df_gastos['Insumo'] == insumo_analisis].sort_values('Fecha')
-                    historial_rend = []
                     
-                    for i in range(len(df_insumo) - 1):
-                        f_ini_h = df_insumo.iloc[i]['Fecha']
-                        f_fin_h = df_insumo.iloc[i+1]['Fecha']
-                        cant_h = df_insumo.iloc[i]['Cantidad']
-                        costo_h = df_insumo.iloc[i]['Costo Total']
-                        autos_h = len(df_autos[(df_autos['Fecha'] >= f_ini_h) & (df_autos['Fecha'] < f_fin_h)])
+                    if len(df_insumo) >= 2 and not df_autos.empty:
+                        # Extraer datos del último ciclo
+                        f_ini_c = df_insumo.iloc[-2]['Fecha']
+                        f_fin_c = df_insumo.iloc[-1]['Fecha']
+                        cant_usada = df_insumo.iloc[-2]['Cantidad']
+                        unidad_ins = df_insumo.iloc[-2]['Unidad']
+                        stock_actual = df_insumo.iloc[-1]['Cantidad']
+                        autos_c = len(df_autos[(df_autos['Fecha'] >= f_ini_c) & (df_autos['Fecha'] < f_fin_c)])
                         
-                        if autos_h > 0:
-                            historial_rend.append({
-                                "Ciclo": f"{f_ini_h.strftime('%d/%m')}",
-                                "Rendimiento": cant_h / autos_h,
-                                "Costo x Auto": costo_h / autos_h
-                            })
-                    
-                    if historial_rend:
-                        df_hist = pd.DataFrame(historial_rend)
-                        fig_evol = go.Figure()
-                        fig_evol.add_trace(go.Bar(x=df_hist['Ciclo'], y=df_hist['Costo x Auto'], name='$/Auto', marker_color='#fbc02d', opacity=0.6, yaxis='y2'))
-                        fig_evol.add_trace(go.Scatter(x=df_hist['Ciclo'], y=df_hist['Rendimiento'], mode='lines+markers+text', name=f'Consumo', line=dict(color='#00235d', width=3), text=df_hist['Rendimiento'].apply(lambda x: f"{x:.2f}"), textposition="top center"))
-                        fig_evol.update_layout(margin=dict(t=30, b=0, l=0, r=0), yaxis=dict(title="Unidad/Auto", side="left"), yaxis2=dict(title="$/Auto", overlaying="y", side="right", showgrid=False), legend=dict(orientation="h", y=1.1, x=0))
-                        st.plotly_chart(fig_evol, use_container_width=True)
+                        if autos_c > 0:
+                            rend_x_auto = cant_usada / autos_c
+                            
+                            # --- TARJETAS DE INDICADORES RECUPERADAS ---
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            m1, m2, m3 = st.columns(3)
+                            m1.metric("Rendimiento", f"{rend_x_auto:.3f} {unidad_ins}/auto")
+                            m2.metric("Autos en Ciclo", f"{autos_c}")
+                            m3.metric("Stock Actual", f"{stock_actual} {unidad_ins}")
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            # --- GRÁFICO DE EVOLUCIÓN HISTÓRICA ---
+                            historial_rend = []
+                            for i in range(len(df_insumo) - 1):
+                                f_ini_h = df_insumo.iloc[i]['Fecha']
+                                f_fin_h = df_insumo.iloc[i+1]['Fecha']
+                                cant_h = df_insumo.iloc[i]['Cantidad']
+                                costo_h = df_insumo.iloc[i]['Costo Total']
+                                autos_h = len(df_autos[(df_autos['Fecha'] >= f_ini_h) & (df_autos['Fecha'] < f_fin_h)])
+                                
+                                if autos_h > 0:
+                                    historial_rend.append({
+                                        "Ciclo": f"{f_ini_h.strftime('%d/%m')}",
+                                        "Rendimiento": cant_h / autos_h,
+                                        "Costo x Auto": costo_h / autos_h
+                                    })
+                            
+                            if historial_rend:
+                                df_hist = pd.DataFrame(historial_rend)
+                                fig_evol = go.Figure()
+                                fig_evol.add_trace(go.Bar(x=df_hist['Ciclo'], y=df_hist['Costo x Auto'], name='$/Auto', marker_color='#fbc02d', opacity=0.6, yaxis='y2'))
+                                fig_evol.add_trace(go.Scatter(x=df_hist['Ciclo'], y=df_hist['Rendimiento'], mode='lines+markers+text', name='Consumo', line=dict(color='#00235d', width=3), text=df_hist['Rendimiento'].apply(lambda x: f"{x:.2f}"), textposition="top center"))
+                                fig_evol.update_layout(margin=dict(t=30, b=0, l=0, r=0), yaxis=dict(title=f"{unidad_ins}/Auto", side="left"), yaxis2=dict(title="$/Auto", overlaying="y", side="right", showgrid=False), legend=dict(orientation="h", y=1.2, x=0))
+                                st.plotly_chart(fig_evol, use_container_width=True)
+                        else:
+                            st.info("No hay autos registrados en este ciclo para calcular el rendimiento.")
                     else:
-                        st.info("Insuficientes datos históricos para graficar.")
+                        st.info("Se necesitan al menos 2 reposiciones cargadas para mostrar los indicadores de este insumo.")
             else:
                 st.info("La planilla de gastos está vacía. Registrá el primer gasto en el panel izquierdo.")
 
