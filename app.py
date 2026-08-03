@@ -484,14 +484,22 @@ def main():
                 # Convertir historial de autos a DataFrame para cruzar
                 df_autos = pd.DataFrame(historial_global) 
                 
-                # Métricas Generales del Mes Actual
-                mes_actual_str = now_dt.strftime("%Y-%m")
-                gastos_mes = df_gastos[df_gastos['Fecha'].dt.strftime('%Y-%m') == mes_actual_str]
+               # --- NUEVO SELECTOR DE MES ---
+                # Recopilar todos los meses donde haya gastos o autos lavados
+                meses_gastos = df_gastos['Fecha'].dt.strftime('%Y-%m').dropna().unique().tolist()
+                meses_autos = [x['Mes'] for x in df_autos.to_dict('records')] if not df_autos.empty and 'Mes' in df_autos.columns else []
+                # Crear una lista única, ordenada de más reciente a más antiguo, asegurando que el mes actual siempre esté
+                meses_disp_gastos = sorted(list(set(meses_gastos + meses_autos + [now_dt.strftime("%Y-%m")])), reverse=True)
+                
+                mes_sel_gastos = st.selectbox("📅 Seleccionar Mes para Resumen:", meses_disp_gastos)
+
+                # Métricas Generales del Mes Seleccionado
+                gastos_mes = df_gastos[df_gastos['Fecha'].dt.strftime('%Y-%m') == mes_sel_gastos]
                 costo_total_mes = gastos_mes['Costo Total'].sum()
                 
-                # Autos lavados en el mes
+                # Autos lavados en el mes seleccionado
                 if not df_autos.empty and 'Mes' in df_autos.columns:
-                    autos_mes = len(df_autos[df_autos['Mes'] == mes_actual_str])
+                    autos_mes = len(df_autos[df_autos['Mes'] == mes_sel_gastos])
                 else:
                     autos_mes = 0
                     
