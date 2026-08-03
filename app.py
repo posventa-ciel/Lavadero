@@ -474,6 +474,7 @@ def main():
                         st.error("No hay conexión con la planilla de gastos.")
 
         # --- SECTOR DERECHO: DASHBOARD DE RENDIMIENTOS ---
+        # --- SECTOR DERECHO: DASHBOARD DE RENDIMIENTOS ---
         with col_dash:
             if not df_gastos.empty:
                 # Limpiar y preparar tipos de datos
@@ -481,28 +482,18 @@ def main():
                 df_gastos['Cantidad'] = df_gastos['Cantidad'].astype(str).str.replace(',', '.').astype(float)
                 df_gastos['Costo Total'] = df_gastos['Costo Total'].astype(str).str.replace(',', '.').astype(float)
                 
-                # Convertir historial de autos a DataFrame para cruzar
                 df_autos = pd.DataFrame(historial_global) 
                 
-               # --- NUEVO SELECTOR DE MES ---
-                # Recopilar todos los meses donde haya gastos o autos lavados
+                # --- SELECTOR DE MES ---
                 meses_gastos = df_gastos['Fecha'].dt.strftime('%Y-%m').dropna().unique().tolist()
                 meses_autos = [x['Mes'] for x in df_autos.to_dict('records')] if not df_autos.empty and 'Mes' in df_autos.columns else []
-                # Crear una lista única, ordenada de más reciente a más antiguo, asegurando que el mes actual siempre esté
                 meses_disp_gastos = sorted(list(set(meses_gastos + meses_autos + [now_dt.strftime("%Y-%m")])), reverse=True)
-                
                 mes_sel_gastos = st.selectbox("📅 Seleccionar Mes para Resumen:", meses_disp_gastos)
 
-                # Métricas Generales del Mes Seleccionado
+                # --- KPIs DEL MES ---
                 gastos_mes = df_gastos[df_gastos['Fecha'].dt.strftime('%Y-%m') == mes_sel_gastos]
                 costo_total_mes = gastos_mes['Costo Total'].sum()
-                
-                # Autos lavados en el mes seleccionado
-                if not df_autos.empty and 'Mes' in df_autos.columns:
-                    autos_mes = len(df_autos[df_autos['Mes'] == mes_sel_gastos])
-                else:
-                    autos_mes = 0
-                    
+                autos_mes = len(df_autos[df_autos['Mes'] == mes_sel_gastos]) if not df_autos.empty and 'Mes' in df_autos.columns else 0
                 costo_x_auto = (costo_total_mes / autos_mes) if autos_mes > 0 else 0
 
                 st.markdown(f"### 📊 Resumen Mensual - {mes_sel_gastos}")
@@ -513,134 +504,100 @@ def main():
                 
                 st.markdown("---")
                 
-                # --- LÓGICA DE RENDIMIENTO (Reposición a Reposición) ---
-                st.markdown("### 🔍 Análisis de Rendimiento y Previsión")
-                insumo_analisis = st.selectbox("Seleccionar insumo para analizar rendimiento:", lista_insumos)
-                
-                df_insumo = df_gastos[df_gastos['Insumo'] == insumo_analisis].sort_values('Fecha')
-                
-                if len(df_insumo) >= 2 and not df_autos.empty:
-                    # Hubo al menos 2 reposiciones, podemos medir el último ciclo completado
-                    fecha_inicio_ciclo = df_insumo.iloc[-2]['Fecha']
-                    fecha_fin_ciclo = df_insumo.iloc[-1]['Fecha'] # Día de la nueva reposición
-                    cantidad_usada = df_insumo.iloc[-2]['Cantidad']
-                    unidad_ins = df_insumo.iloc[-2]['Unidad']
-                    stock_actual = df_insumo.iloc[-1]['Cantidad']
-                    
-                    # Autos lavados durante ese ciclo
-                    autos_ciclo = len(df_autos[(df_autos['Fecha'] >= fecha_inicio_ciclo) & (df_autos['Fecha'] < fecha_fin_ciclo)])
-                    
-                    if autos_ciclo > 0:
-                        rendimiento_x_auto = cantidad_usada / autos_ciclo
-                        
-                        # Previsión: Calculamos ritmo diario últimos 30 días
-                        hace_30_dias = (now_dt - timedelta(days=30)).replace(tzinfo=None)
-                        autos_ultimos_30 = len(df_autos[df_autos['Fecha'] >= hace_30_dias])
-                        promedio_autos_dia = autos_ultimos_30 / 30 if autos_ultimos_30 > 0 else 1
-                        
-                        # ¿Cuánto durará el stock actual?
-                        consumo_diario_est = rendimiento_x_auto * promedio_autos_dia
-                        dias_duracion = stock_actual / consumo_diario_est if consumo_diario_est > 0 else 0
-                        fecha_prevision = fecha_fin_ciclo + timedelta(days=dias_duracion)
-                        
-                        r1, r2, r3, r4 = st.columns(4)
-                        r1.metric("Rendimiento del ciclo", f"{rendimiento_x_auto:,.3f} {unidad_ins}/auto")
-                        r2.metric("Autos en el ciclo", f"{autos_ciclo} autos")
-                        r3.metric("Stock Actual", f"{stock_actual} {unidad_ins}")
-                        
-                        fecha_prev_str = fecha_prevision.strftime("%d/%m")
-                        estado_stock = "NORMAL"
-                        color_stock = "badge-ok"
-                        if fecha_prevision.date() <= (now_dt.date() + timedelta(days=3)):
-                            estado_stock = "CRÍTICO"
-                            color_stock = "badge-red"
-                        
-                        r4.markdown(f"<div style='text-align:center'><small>Próxima Reposición:</small><br><span class='badge {color_stock}' style='font-size:14px; padding:5px 10px;'>{fecha_prev_str} ({estado_stock})</span></div>", unsafe_allow_html=True)
-
-                        # --- NUEVO: EVOLUCIÓN HISTÓRICA DEL INSUMO ---
-                        st.markdown("---")
-                        st.markdown(f"#### 📈 Evolución Histórica: {insumo_analisis}")
-                        
-                        historial_rend = []
-                        # Recorremos todos los ciclos desde el primero hasta el actual
-                        for i in range(len(df_insumo) - 1):
-                            f_ini_h = df_insumo.iloc[i]['Fecha']
-                            f_fin_h = df_insumo.iloc[i+1]['Fecha']
-                            cant_h = df_insumo.iloc[i]['Cantidad']
-                            costo_h = df_insumo.iloc[i]['Costo Total']
-                            
-                            # Autos en este ciclo específico
-                            autos_h = len(df_autos[(df_autos['Fecha'] >= f_ini_h) & (df_autos['Fecha'] < f_fin_h)])
-                            
-                            if autos_h > 0:
-                                historial_rend.append({
-                                    "Ciclo": f"{f_ini_h.strftime('%d/%m')} al {f_fin_h.strftime('%d/%m')}",
-                                    "Rendimiento": cant_h / autos_h,
-                                    "Costo x Auto": costo_h / autos_h,
-                                    "Autos": autos_h
-                                })
-                        
-                        if historial_rend:
-                            df_hist = pd.DataFrame(historial_rend)
-                            
-                            # Gráfico de doble eje: Físico vs Económico
-                            fig_evol = go.Figure()
-                            
-                            # Barras: Costo en pesos por auto (Eje Y derecho)
-                            fig_evol.add_trace(go.Bar(
-                                x=df_hist['Ciclo'], y=df_hist['Costo x Auto'], 
-                                name='Costo x Auto ($)', marker_color='#fbc02d', opacity=0.6, yaxis='y2'
-                            ))
-                            
-                            # Línea: Consumo físico por auto (Eje Y principal)
-                            fig_evol.add_trace(go.Scatter(
-                                x=df_hist['Ciclo'], y=df_hist['Rendimiento'], 
-                                mode='lines+markers+text', name=f'Consumo ({unidad_ins}/auto)',
-                                line=dict(color='#00235d', width=4),
-                                marker=dict(size=8),
-                                text=df_hist['Rendimiento'].apply(lambda x: f"{x:.2f}"),
-                                textposition="top center"
-                            ))
-                            
-                            fig_evol.update_layout(
-                                margin=dict(t=30, b=0, l=0, r=0),
-                                yaxis=dict(title=f"{unidad_ins} / Auto", side="left"),
-                                yaxis2=dict(title="$ / Auto", overlaying="y", side="right", showgrid=False),
-                                legend=dict(orientation="h", y=1.1, x=0)
-                            )
-                            st.plotly_chart(fig_evol, use_container_width=True)
-                            
-                            # Tablita resumen debajo del gráfico
-                            st.dataframe(
-                                df_hist.style.format({
-                                    "Rendimiento": "{:.3f}", 
-                                    "Costo x Auto": "${:.2f}"
-                                }), 
-                                use_container_width=True, hide_index=True
-                            )
-                    else:
-                        st.info("No hay autos registrados en el período de este ciclo para calcular rendimiento.")
-                elif len(df_insumo) == 1:
-                    st.info(f"Se necesita cargar una segunda reposición de **{insumo_analisis}** cuando se acabe para calcular su rendimiento exacto.")
-                else:
-                    st.warning(f"Aún no hay compras registradas de **{insumo_analisis}**.")
-                    
-                # Gráficos
+                # --- 1. VISTA GENERAL DE COMPRAS DEL MES ---
+                st.markdown(f"### 🛒 ¿Qué se compró en {mes_sel_gastos}?")
                 if not gastos_mes.empty:
-                    cg1, cg2 = st.columns(2)
-                    with cg1:
-                        fig_pie = px.pie(gastos_mes, values='Costo Total', names='Insumo', 
-                                         title='Distribución de Gastos (Mes Actual)')
+                    df_compras_vista = gastos_mes[['Fecha', 'Insumo', 'Cantidad', 'Unidad', 'Costo Total', 'Responsable']].copy()
+                    df_compras_vista['Fecha'] = df_compras_vista['Fecha'].dt.strftime('%d/%m/%Y')
+                    df_compras_vista['Costo Total'] = df_compras_vista['Costo Total'].apply(lambda x: f"${x:,.2f}")
+                    st.dataframe(df_compras_vista, use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"No hay gastos registrados en el mes de {mes_sel_gastos}.")
+
+                st.markdown("---")
+
+                # --- 2. ESTADO GENERAL DE RENDIMIENTOS (TODOS LOS INSUMOS) ---
+                st.markdown("### 🔍 Estado General de Rendimientos y Stock")
+                
+                datos_rendimiento = []
+                insumos_con_compras = df_gastos['Insumo'].unique()
+                hace_30_dias = (now_dt - timedelta(days=30)).replace(tzinfo=None)
+                autos_ultimos_30 = len(df_autos[df_autos['Fecha'] >= hace_30_dias])
+                promedio_autos_dia = autos_ultimos_30 / 30 if autos_ultimos_30 > 0 else 1
+                
+                for ins in insumos_con_compras:
+                    df_i = df_gastos[df_gastos['Insumo'] == ins].sort_values('Fecha')
+                    if len(df_i) >= 2 and not df_autos.empty:
+                        f_ini_c = df_i.iloc[-2]['Fecha']
+                        f_fin_c = df_i.iloc[-1]['Fecha']
+                        cant_usada = df_i.iloc[-2]['Cantidad']
+                        unidad_ins = df_i.iloc[-2]['Unidad']
+                        stock_actual = df_i.iloc[-1]['Cantidad']
+                        autos_c = len(df_autos[(df_autos['Fecha'] >= f_ini_c) & (df_autos['Fecha'] < f_fin_c)])
+                        
+                        if autos_c > 0:
+                            rend_x_auto = cant_usada / autos_c
+                            consumo_diario_est = rend_x_auto * promedio_autos_dia
+                            dias_duracion = stock_actual / consumo_diario_est if consumo_diario_est > 0 else 0
+                            fecha_prev = f_fin_c + timedelta(days=dias_duracion)
+                            estado = "🔴 CRÍTICO" if fecha_prev.date() <= (now_dt.date() + timedelta(days=3)) else "🟢 NORMAL"
+                            
+                            datos_rendimiento.append({
+                                "Insumo": ins,
+                                "Rendimiento": f"{rend_x_auto:.3f} {unidad_ins}/auto",
+                                "Ciclo Actual": f"{autos_c} autos",
+                                "Stock Actual": f"{stock_actual} {unidad_ins}",
+                                "Próx. Reposición": fecha_prev.strftime("%d/%m"),
+                                "Estado": estado
+                            })
+                
+                if datos_rendimiento:
+                    st.dataframe(pd.DataFrame(datos_rendimiento), use_container_width=True, hide_index=True)
+                else:
+                    st.info("Se necesitan al menos 2 reposiciones de un mismo insumo para empezar a calcular su rendimiento general.")
+
+                st.markdown("---")
+                
+                # --- 3. GRÁFICOS Y EVOLUCIÓN HISTÓRICA ---
+                st.markdown("### 📈 Gráficos y Evolución Histórica")
+                cg1, cg2 = st.columns(2)
+                
+                with cg1:
+                    if not gastos_mes.empty:
+                        fig_pie = px.pie(gastos_mes, values='Costo Total', names='Insumo', title=f'Gastos de {mes_sel_gastos}', hole=0.4)
                         fig_pie.update_layout(margin=dict(t=30, b=0, l=0, r=0))
                         st.plotly_chart(fig_pie, use_container_width=True)
-                    with cg2:
-                        # Consumo físico histórico general
-                        fig_bar = px.bar(df_gastos.groupby(['Insumo', 'Unidad'])['Cantidad'].sum().reset_index(), 
-                                         x='Insumo', y='Cantidad', text='Unidad',
-                                         title='Consumo Físico Total Histórico',
-                                         color_discrete_sequence=['#00235d'])
-                        fig_bar.update_layout(margin=dict(t=30, b=0, l=0, r=0))
-                        st.plotly_chart(fig_bar, use_container_width=True)
+                    else:
+                        st.write("Sin datos en el mes para el gráfico.")
+                        
+                with cg2:
+                    insumo_analisis = st.selectbox("Ver evolución histórica detallada:", insumos_con_compras)
+                    df_insumo = df_gastos[df_gastos['Insumo'] == insumo_analisis].sort_values('Fecha')
+                    historial_rend = []
+                    
+                    for i in range(len(df_insumo) - 1):
+                        f_ini_h = df_insumo.iloc[i]['Fecha']
+                        f_fin_h = df_insumo.iloc[i+1]['Fecha']
+                        cant_h = df_insumo.iloc[i]['Cantidad']
+                        costo_h = df_insumo.iloc[i]['Costo Total']
+                        autos_h = len(df_autos[(df_autos['Fecha'] >= f_ini_h) & (df_autos['Fecha'] < f_fin_h)])
+                        
+                        if autos_h > 0:
+                            historial_rend.append({
+                                "Ciclo": f"{f_ini_h.strftime('%d/%m')}",
+                                "Rendimiento": cant_h / autos_h,
+                                "Costo x Auto": costo_h / autos_h
+                            })
+                    
+                    if historial_rend:
+                        df_hist = pd.DataFrame(historial_rend)
+                        fig_evol = go.Figure()
+                        fig_evol.add_trace(go.Bar(x=df_hist['Ciclo'], y=df_hist['Costo x Auto'], name='$/Auto', marker_color='#fbc02d', opacity=0.6, yaxis='y2'))
+                        fig_evol.add_trace(go.Scatter(x=df_hist['Ciclo'], y=df_hist['Rendimiento'], mode='lines+markers+text', name=f'Consumo', line=dict(color='#00235d', width=3), text=df_hist['Rendimiento'].apply(lambda x: f"{x:.2f}"), textposition="top center"))
+                        fig_evol.update_layout(margin=dict(t=30, b=0, l=0, r=0), yaxis=dict(title="Unidad/Auto", side="left"), yaxis2=dict(title="$/Auto", overlaying="y", side="right", showgrid=False), legend=dict(orientation="h", y=1.1, x=0))
+                        st.plotly_chart(fig_evol, use_container_width=True)
+                    else:
+                        st.info("Insuficientes datos históricos para graficar.")
             else:
                 st.info("La planilla de gastos está vacía. Registrá el primer gasto en el panel izquierdo.")
 
