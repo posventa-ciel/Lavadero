@@ -479,8 +479,13 @@ def main():
             if not df_gastos.empty:
                 # Limpiar y preparar tipos de datos
                 df_gastos['Fecha'] = pd.to_datetime(df_gastos['Fecha'], format='%d/%m/%Y', errors='coerce')
-                df_gastos['Cantidad'] = df_gastos['Cantidad'].astype(str).str.replace(',', '.').astype(float)
-                df_gastos['Costo Total'] = df_gastos['Costo Total'].astype(str).str.replace(',', '.').astype(float)
+                
+                # Limpieza a prueba de fallos (elimina signos $, cambia comas por puntos y convierte espacios vacíos en 0)
+                df_gastos['Cantidad'] = df_gastos['Cantidad'].astype(str).str.replace('$', '', regex=False).str.replace(',', '.')
+                df_gastos['Cantidad'] = pd.to_numeric(df_gastos['Cantidad'], errors='coerce').fillna(0)
+                
+                df_gastos['Costo Total'] = df_gastos['Costo Total'].astype(str).str.replace('$', '', regex=False).str.replace(',', '.')
+                df_gastos['Costo Total'] = pd.to_numeric(df_gastos['Costo Total'], errors='coerce').fillna(0)
                 
                 df_autos = pd.DataFrame(historial_global) 
                 
